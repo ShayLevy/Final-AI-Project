@@ -881,49 +881,6 @@ The 10 test queries cover different system capabilities:
 
 ---
 
-## Project Structure
-
-```
-Midterm-Coding-Assignment/
-├── data/
-│   └── insurance_claim_CLM2024001.pdf    # Insurance claim PDF document
-├── src/
-│   ├── vector_store/
-│   │   ├── __init__.py
-│   │   └── setup.py                       # ChromaDB management
-│   ├── indexing/
-│   │   ├── __init__.py
-│   │   ├── document_loader.py             # PDF/document parsing
-│   │   ├── chunking.py                    # Hierarchical chunking
-│   │   └── build_indexes.py               # Index builders
-│   ├── retrieval/
-│   │   ├── __init__.py
-│   │   └── hierarchical_retriever.py      # Retrieval with filtering
-│   ├── agents/
-│   │   ├── __init__.py
-│   │   ├── langchain_integration.py       # LangChain bridge
-│   │   ├── manager_agent.py               # Router agent
-│   │   ├── summarization_agent.py         # Summary specialist
-│   │   └── needle_agent.py                # Needle specialist
-│   ├── mcp/
-│   │   ├── __init__.py
-│   │   └── tools.py                       # MCP tools
-│   └── evaluation/
-│       ├── __init__.py
-│       ├── judge.py                       # LLM-as-a-judge (Anthropic Claude)
-│       └── test_queries.py                # Test suite (10 queries)
-├── chroma_db/                            # Vector store (auto-created)
-├── evaluation_results/                   # Eval outputs (auto-created)
-├── streamlit_app.py                      # Streamlit web interface
-├── main.py                               # Main orchestrator
-├── run_evaluation.py                     # CLI evaluation runner
-├── requirements.txt                      # Dependencies
-├── .env                                  # API keys (OPENAI, ANTHROPIC)
-└── README.md                             # This file
-```
-
----
-
 ## Educational Value
 
 This project demonstrates real-world GenAI engineering skills:
