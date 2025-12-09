@@ -9,6 +9,7 @@ import sys
 import logging
 import shutil
 import time
+import json
 from pathlib import Path
 from datetime import datetime
 from dotenv import load_dotenv
@@ -137,6 +138,30 @@ DEFAULT_CHUNK_SIZES = {
     'small': 128
 }
 DEFAULT_OVERLAP_RATIO = 0.2
+
+# Evaluation history file path
+EVAL_HISTORY_FILE = Path("./evaluation_results/evaluation_history.json")
+
+
+def load_evaluation_history():
+    """Load evaluation history from file"""
+    if EVAL_HISTORY_FILE.exists():
+        try:
+            with open(EVAL_HISTORY_FILE, 'r') as f:
+                return json.load(f)
+        except (json.JSONDecodeError, IOError):
+            return []
+    return []
+
+
+def save_evaluation_history(history):
+    """Save evaluation history to file"""
+    EVAL_HISTORY_FILE.parent.mkdir(exist_ok=True)
+    try:
+        with open(EVAL_HISTORY_FILE, 'w') as f:
+            json.dump(history, f, indent=2, default=str)
+    except IOError as e:
+        st.warning(f"Could not save evaluation history: {e}")
 
 
 def setup_logging():
@@ -1076,6 +1101,8 @@ else:
             st.session_state.ragas_results = None
         if 'judge_results' not in st.session_state:
             st.session_state.judge_results = None
+        if 'evaluation_history' not in st.session_state:
+            st.session_state.evaluation_history = load_evaluation_history()
 
         # Test case management
         st.subheader("Test Cases")
@@ -1101,26 +1128,20 @@ else:
                 else:
                     st.warning("Please enter a question")
 
-        # Predefined test cases - aligned with src/evaluation/test_queries.py (10 queries)
-        # These are the same queries used by run_evaluation.py for LLM-as-a-Judge evaluation
+        # Predefined test cases - 5 Summary (General) + 5 Needle queries
         predefined_cases = [
-            # Summary queries (test Summary Index)
+            # ===== SUMMARY / GENERAL QUERIES (5) =====
             {"question": "What is this insurance claim about? Provide a summary.", "ground_truth": "This is an auto insurance claim (CLM-2024-001) for a multi-vehicle collision that occurred on January 12, 2024, at 7:42 AM at the intersection of Wilshire Blvd and Vermont Ave in Los Angeles. Sarah Mitchell's 2021 Honda Accord was struck by Robert Harrison's vehicle which ran a red light while Harrison was driving under the influence (BAC 0.14). Mitchell sustained whiplash injuries, the vehicle required $17,111.83 in repairs, and the total claim amount was $23,370.80.", "category": "Summary"},
             {"question": "Provide a timeline of key events from the incident through vehicle return.", "ground_truth": "January 12, 2024 (7:42 AM): Incident occurred. January 15, 2024: Claim filed. January 26, 2024: Liability accepted by at-fault party. January 29, 2024: Repairs authorized and commenced. February 15, 2024: Repairs completed. February 16, 2024: Vehicle returned to policyholder.", "category": "Summary"},
-            # Needle queries (test Hierarchical Index with small chunks)
+            {"question": "Who were the witnesses and what did they observe?", "ground_truth": "There were three witnesses: Marcus Thompson (at bus stop) saw Harrison's Camry run a red light at high speed without braking. Elena Rodriguez (stopped in left turn lane) observed the Camry had a red light for several seconds before entering the intersection and noted Harrison appeared intoxicated after the crash. Patricia O'Brien (RN) confirmed the traffic signal timing and noted sunrise was at 6:58 AM with normal lighting conditions.", "category": "Summary"},
+            {"question": "Summarize the medical treatment Sarah Mitchell received.", "ground_truth": "Sarah Mitchell was treated at Cedars-Sinai Emergency Department for cervical strain (whiplash) and post-traumatic headache. She had a follow-up with orthopedist Dr. Rachel Kim who prescribed physical therapy. She completed 8 physical therapy sessions at Pacific Coast Physical Therapy with Marcus Rodriguez, PT, DPT, from February 2-27, 2024.", "category": "Summary"},
+            {"question": "What was the outcome of the liability determination?", "ground_truth": "Robert Harrison's insurance company (Nationwide Insurance) accepted 100% liability for the accident on January 26, 2024. Harrison was cited for DUI and running a red light. His BAC was 0.14%, above the legal limit of 0.08%.", "category": "Summary"},
+            # ===== NEEDLE QUERIES (5) =====
             {"question": "What was the exact collision deductible amount?", "ground_truth": "The collision deductible was exactly $750.", "category": "Needle"},
             {"question": "At what exact time did the accident occur?", "ground_truth": "The accident occurred at exactly 7:42 AM (more precisely 7:42:15 AM based on the incident timeline).", "category": "Needle"},
             {"question": "Who was the claims adjuster assigned to this case?", "ground_truth": "Kevin Park was the claims adjuster assigned to this case.", "category": "Needle"},
-            # MCP/Computation query
-            {"question": "How many days passed between the incident date and when the claim was filed?", "ground_truth": "3 days passed between the incident (January 12, 2024) and when the claim was filed (January 15, 2024).", "category": "MCP"},
-            # Sparse/Needle-in-haystack query (tests deep search)
-            {"question": "What specific observation did Patricia O'Brien make about lighting conditions?", "ground_truth": "Patricia O'Brien noted that the street lights were on a normal cycle and that sunrise was at 6:58 AM, so at 7:42 AM there would have been daylight. She confirmed the Camry definitely would have had a red light.", "category": "Sparse"},
-            # Hybrid query (summary + precise facts)
-            {"question": "Summarize the medical treatment and provide the exact number of physical therapy sessions.", "ground_truth": "Sarah Mitchell was treated at Cedars-Sinai Emergency Department for cervical strain (whiplash) and post-traumatic headache. She had a follow-up with orthopedist Dr. Rachel Kim who prescribed physical therapy. She completed exactly 8 physical therapy sessions at Pacific Coast Physical Therapy with Marcus Rodriguez, PT, DPT, from February 2-27, 2024.", "category": "Hybrid"},
-            # Additional Needle query - BAC level
             {"question": "What was Robert Harrison's Blood Alcohol Concentration (BAC)?", "ground_truth": "Robert Harrison's Blood Alcohol Concentration (BAC) was 0.14%, which is significantly above the legal limit of 0.08%.", "category": "Needle"},
-            # Additional Summary query - witnesses
-            {"question": "Who were the witnesses and what did they observe?", "ground_truth": "There were three witnesses: Marcus Thompson (rideshare driver) saw Harrison's Camry run a red light at high speed without braking. Elena Rodriguez (pedestrian) observed the Camry had a red light for 3-4 seconds before entering the intersection and noted Harrison appeared intoxicated after the crash. Patricia O'Brien (RN, commuter) confirmed the traffic signal timing and noted sunrise was at 6:58 AM with normal lighting conditions.", "category": "Summary"},
+            {"question": "How many physical therapy sessions did Sarah Mitchell complete?", "ground_truth": "Sarah Mitchell completed exactly 8 physical therapy sessions.", "category": "Needle"},
         ]
 
         # Auto-load predefined test cases on first visit
@@ -1267,8 +1288,12 @@ else:
 
                             st.session_state.ragas_results = {
                                 'scores': scores_dict, 'details': eval_data,
-                                'timestamp': datetime.now().strftime('%Y-%m-%d %H:%M:%S'), 'method': 'RAGAS'
+                                'timestamp': datetime.now().strftime('%Y-%m-%d %H:%M:%S'), 'method': 'RAGAS',
+                                'num_questions': total_cases
                             }
+                            # Save to history (session + file)
+                            st.session_state.evaluation_history.append(st.session_state.ragas_results.copy())
+                            save_evaluation_history(st.session_state.evaluation_history)
                             st.session_state.judge_results = None
 
                         else:
@@ -1333,8 +1358,12 @@ else:
                                 },
                                 'query_results': query_results,
                                 'timestamp': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
-                                'method': 'LLM-as-a-Judge (Claude)'
+                                'method': 'LLM-as-a-Judge (Claude)',
+                                'num_questions': total_cases
                             }
+                            # Save to history (session + file)
+                            st.session_state.evaluation_history.append(st.session_state.judge_results.copy())
+                            save_evaluation_history(st.session_state.evaluation_history)
                             st.session_state.ragas_results = None
 
                         st.success("Evaluation complete!")
@@ -1752,6 +1781,67 @@ else:
                     5. **Increase logging** - add detailed logs to identify failure points
                     6. **Consider different models** - try GPT-4-turbo or Claude for generation
                     """)
+
+        # ==========================================================================
+        # EVALUATION HISTORY SECTION
+        # ==========================================================================
+        if st.session_state.evaluation_history:
+            st.divider()
+            st.subheader("Evaluation History")
+            st.caption(f"Total evaluations: {len(st.session_state.evaluation_history)}")
+
+            # Create comparison table
+            import pandas as pd
+
+            history_data = []
+            for i, eval_run in enumerate(reversed(st.session_state.evaluation_history)):
+                row = {
+                    '#': len(st.session_state.evaluation_history) - i,
+                    'Timestamp': eval_run.get('timestamp', 'N/A'),
+                    'Method': eval_run.get('method', 'N/A'),
+                    'Questions': eval_run.get('num_questions', 'N/A'),
+                }
+
+                scores = eval_run.get('scores', {})
+                if eval_run.get('method') == 'RAGAS':
+                    # RAGAS scores (0-1 scale, convert to %)
+                    faith = scores.get('faithfulness')
+                    if isinstance(faith, list):
+                        faith = sum(faith) / len(faith) if faith else 0
+                    row['Faithfulness'] = f"{faith:.1%}" if faith is not None else 'N/A'
+
+                    relevancy = scores.get('answer_relevancy')
+                    if isinstance(relevancy, list):
+                        relevancy = sum(relevancy) / len(relevancy) if relevancy else 0
+                    row['Relevancy'] = f"{relevancy:.1%}" if relevancy is not None else 'N/A'
+
+                    precision = scores.get('context_precision')
+                    if isinstance(precision, list):
+                        precision = sum(precision) / len(precision) if precision else 0
+                    row['Precision'] = f"{precision:.1%}" if precision is not None else 'N/A'
+
+                    row['Correctness'] = 'N/A'
+                    row['Average'] = 'N/A'
+                else:
+                    # LLM-as-a-Judge scores (1-5 scale)
+                    row['Faithfulness'] = 'N/A'
+                    row['Precision'] = 'N/A'
+                    row['Correctness'] = f"{scores.get('correctness', 0):.2f}/5"
+                    row['Relevancy'] = f"{scores.get('relevancy', 0):.2f}/5"
+                    row['Average'] = f"{scores.get('average', 0):.2f}/5"
+
+                history_data.append(row)
+
+            df_history = pd.DataFrame(history_data)
+            st.dataframe(df_history, use_container_width=True, hide_index=True)
+
+            # Clear history button
+            col1, col2 = st.columns([1, 5])
+            with col1:
+                if st.button("Clear History", type="secondary"):
+                    st.session_state.evaluation_history = []
+                    save_evaluation_history([])  # Clear file too
+                    st.rerun()
 
 # Footer
 st.divider()

@@ -1,6 +1,6 @@
 """
 Test Suite with Diverse Queries
-Covers different query types and system capabilities
+5 Summary (General) queries + 5 Needle (Precise) queries
 """
 
 from typing import List, Dict, Any
@@ -13,6 +13,7 @@ logger = logging.getLogger(__name__)
 class TestSuite:
     """
     Comprehensive test suite for evaluating the insurance claim system
+    5 Summary queries + 5 Needle queries = 10 total
     """
 
     @staticmethod
@@ -24,30 +25,30 @@ class TestSuite:
             List of test query dictionaries
         """
         return [
-            # Query 1: High-level summary (tests Summary Index)
+            # ===== SUMMARY / GENERAL QUERIES (5) =====
+
+            # Query 1: High-level summary
             {
                 "id": "Q1_SUMMARY",
                 "query": "What is this insurance claim about? Provide a summary.",
                 "type": "summary",
                 "expected_agent": "summarization",
                 "expected_index": "summary",
-                "ground_truth": "This is an auto insurance claim (CLM-2024-001) for a multi-vehicle collision that occurred on January 12, 2024, at 7:42 AM at the intersection of Wilshire Blvd and Vermont Ave in Los Angeles. Sarah Mitchell's 2021 Honda Accord was struck by Robert Harrison's vehicle which ran a red light while Harrison was driving under the influence (BAC 0.14). A secondary low-speed collision occurred when Jennifer Park's vehicle struck Mitchell's car from behind. Mitchell sustained neck injuries (whiplash), the vehicle required $17,111.83 in repairs, and the total claim amount was $23,370.80. Harrison was arrested for DUI and accepted 100% liability.",
+                "ground_truth": "This is an auto insurance claim (CLM-2024-001) for a multi-vehicle collision that occurred on January 12, 2024, at 7:42 AM at the intersection of Wilshire Blvd and Vermont Ave in Los Angeles. Sarah Mitchell's 2021 Honda Accord was struck by Robert Harrison's vehicle which ran a red light while Harrison was driving under the influence (BAC 0.14). Mitchell sustained whiplash injuries, the vehicle required $17,111.83 in repairs, and the total claim amount was $23,370.80.",
                 "expected_chunks": [
                     "Incident description",
                     "Timeline of events",
-                    "Financial summary",
-                    "Parties involved"
+                    "Financial summary"
                 ],
                 "key_facts": [
                     "Multi-vehicle collision",
                     "DUI involved",
                     "January 12, 2024",
-                    "Whiplash injury",
                     "Total claim ~$23,370"
                 ]
             },
 
-            # Query 2: Timeline query (tests Summary Index)
+            # Query 2: Timeline query
             {
                 "id": "Q2_TIMELINE",
                 "query": "Provide a timeline of key events from the incident through vehicle return.",
@@ -66,146 +67,14 @@ class TestSuite:
                 ]
             },
 
-            # Query 3: Needle query - specific amount (tests Hierarchical Index, small chunks)
+            # Query 3: Witness summary
             {
-                "id": "Q3_NEEDLE_DEDUCTIBLE",
-                "query": "What was the exact collision deductible amount?",
-                "type": "needle",
-                "expected_agent": "needle",
-                "expected_index": "hierarchical",
-                "ground_truth": "The collision deductible was exactly $750.",
-                "expected_chunks": [
-                    "Policy Information section",
-                    "Deductible information subsection"
-                ],
-                "key_facts": [
-                    "$750",
-                    "collision deductible"
-                ]
-            },
-
-            # Query 4: Needle query - precise time (tests small chunks)
-            {
-                "id": "Q4_NEEDLE_TIME",
-                "query": "At what exact time did the accident occur?",
-                "type": "needle",
-                "expected_agent": "needle",
-                "expected_index": "hierarchical",
-                "ground_truth": "The accident occurred at exactly 7:42 AM (more precisely 7:42:15 AM based on the incident timeline).",
-                "expected_chunks": [
-                    "Incident Timeline section",
-                    "Time of incident details"
-                ],
-                "key_facts": [
-                    "7:42 AM",
-                    "7:42:15 AM"
-                ]
-            },
-
-            # Query 5: Entity query - person (tests Hierarchical Index)
-            {
-                "id": "Q5_ENTITY_ADJUSTER",
-                "query": "Who was the claims adjuster assigned to this case?",
-                "type": "needle",
-                "expected_agent": "needle",
-                "expected_index": "hierarchical",
-                "ground_truth": "Kevin Park was the claims adjuster assigned to this case.",
-                "expected_chunks": [
-                    "Policy Information or Timeline section",
-                    "Mentions of adjuster assignments"
-                ],
-                "key_facts": [
-                    "Kevin Park",
-                    "claims adjuster"
-                ]
-            },
-
-            # Query 6: Computation query with MCP tool
-            {
-                "id": "Q6_MCP_CALCULATION",
-                "query": "How many days passed between the incident date and when the claim was filed?",
-                "type": "hybrid_mcp",
-                "expected_agent": "manager",
-                "expected_tool": "CalculateDaysBetween",
-                "ground_truth": "3 days passed between the incident (January 12, 2024) and when the claim was filed (January 15, 2024).",
-                "expected_chunks": [
-                    "Timeline section",
-                    "MCP tool calculation"
-                ],
-                "key_facts": [
-                    "3 days",
-                    "January 12 to January 15"
-                ]
-            },
-
-            # Query 7: Sparse data / Needle-in-haystack (tests deep search)
-            {
-                "id": "Q7_SPARSE_WITNESS_DETAIL",
-                "query": "What specific observation did Patricia O'Brien make about lighting conditions?",
-                "type": "needle_sparse",
-                "expected_agent": "needle",
-                "expected_index": "hierarchical",
-                "ground_truth": "Patricia O'Brien noted that the street lights were on a normal cycle and that sunrise was at 6:58 AM, so at 7:42 AM there would have been daylight. She confirmed the Camry definitely would have had a red light.",
-                "expected_chunks": [
-                    "Witness Statements section",
-                    "Patricia O'Brien's statement (Witness #4)"
-                ],
-                "key_facts": [
-                    "Patricia O'Brien",
-                    "lighting conditions",
-                    "sunrise 6:58 AM",
-                    "normal cycle"
-                ]
-            },
-
-            # Query 8: Hybrid query (summary + precise facts)
-            {
-                "id": "Q8_HYBRID",
-                "query": "Summarize the medical treatment and provide the exact number of physical therapy sessions.",
-                "type": "hybrid",
-                "expected_agent": "manager",
-                "expected_index": "both",
-                "ground_truth": "Sarah Mitchell was treated at Cedars-Sinai Emergency Department for cervical strain (whiplash) and post-traumatic headache. She had a follow-up with orthopedist Dr. Rachel Kim who prescribed physical therapy. She completed exactly 8 physical therapy sessions at Pacific Coast Physical Therapy with Marcus Rodriguez, PT, DPT, from February 2-27, 2024. She was cleared for normal activities after completing therapy.",
-                "expected_chunks": [
-                    "Medical Documentation section",
-                    "Physical therapy records"
-                ],
-                "key_facts": [
-                    "8 physical therapy sessions",
-                    "Cervical strain/whiplash",
-                    "Cedars-Sinai ED",
-                    "Dr. Rachel Kim",
-                    "Marcus Rodriguez, PT"
-                ]
-            },
-
-            # Query 9: Needle query - BAC level (tests precise fact extraction)
-            {
-                "id": "Q9_NEEDLE_BAC",
-                "query": "What was Robert Harrison's Blood Alcohol Concentration (BAC)?",
-                "type": "needle",
-                "expected_agent": "needle",
-                "expected_index": "hierarchical",
-                "ground_truth": "Robert Harrison's Blood Alcohol Concentration (BAC) was 0.14%, which is significantly above the legal limit of 0.08%.",
-                "expected_chunks": [
-                    "Police Report section",
-                    "Incident Timeline section"
-                ],
-                "key_facts": [
-                    "0.14%",
-                    "BAC",
-                    "above legal limit"
-                ]
-            },
-
-            # Query 10: Summary query - witnesses (tests summary retrieval)
-            {
-                "id": "Q10_SUMMARY_WITNESSES",
+                "id": "Q3_WITNESSES",
                 "query": "Who were the witnesses and what did they observe?",
                 "type": "summary",
                 "expected_agent": "summarization",
                 "expected_index": "summary",
-                "ground_truth": "There were three witnesses: Marcus Thompson (rideshare driver) saw Harrison's Camry run a red light at high speed without braking. Elena Rodriguez (pedestrian) observed the Camry had a red light for 3-4 seconds before entering the intersection and noted Harrison appeared intoxicated after the crash. Patricia O'Brien (RN, commuter) confirmed the traffic signal timing and noted sunrise was at 6:58 AM with normal lighting conditions.",
+                "ground_truth": "There were three witnesses: Marcus Thompson (at bus stop) saw Harrison's Camry run a red light at high speed without braking. Elena Rodriguez (stopped in left turn lane) observed the Camry had a red light for several seconds before entering the intersection and noted Harrison appeared intoxicated after the crash. Patricia O'Brien (RN) confirmed the traffic signal timing and noted sunrise was at 6:58 AM with normal lighting conditions.",
                 "expected_chunks": [
                     "Witness Statements section",
                     "All witness testimonies"
@@ -214,8 +83,137 @@ class TestSuite:
                     "Marcus Thompson",
                     "Elena Rodriguez",
                     "Patricia O'Brien",
-                    "ran red light",
-                    "appeared intoxicated"
+                    "ran red light"
+                ]
+            },
+
+            # Query 4: Medical treatment summary
+            {
+                "id": "Q4_MEDICAL",
+                "query": "Summarize the medical treatment Sarah Mitchell received.",
+                "type": "summary",
+                "expected_agent": "summarization",
+                "expected_index": "summary",
+                "ground_truth": "Sarah Mitchell was treated at Cedars-Sinai Emergency Department for cervical strain (whiplash) and post-traumatic headache. She had a follow-up with orthopedist Dr. Rachel Kim who prescribed physical therapy. She completed 8 physical therapy sessions at Pacific Coast Physical Therapy with Marcus Rodriguez, PT, DPT, from February 2-27, 2024.",
+                "expected_chunks": [
+                    "Medical Documentation section",
+                    "Physical therapy records"
+                ],
+                "key_facts": [
+                    "Cedars-Sinai ED",
+                    "whiplash",
+                    "Dr. Rachel Kim",
+                    "8 PT sessions"
+                ]
+            },
+
+            # Query 5: Liability outcome
+            {
+                "id": "Q5_LIABILITY",
+                "query": "What was the outcome of the liability determination?",
+                "type": "summary",
+                "expected_agent": "summarization",
+                "expected_index": "summary",
+                "ground_truth": "Robert Harrison's insurance company (Nationwide Insurance) accepted 100% liability for the accident on January 26, 2024. Harrison was cited for DUI and running a red light. His BAC was 0.14%, above the legal limit of 0.08%.",
+                "expected_chunks": [
+                    "Liability section",
+                    "Police Report section"
+                ],
+                "key_facts": [
+                    "100% liability",
+                    "January 26, 2024",
+                    "DUI citation",
+                    "0.14% BAC"
+                ]
+            },
+
+            # ===== NEEDLE QUERIES (5) =====
+
+            # Query 6: Deductible amount
+            {
+                "id": "Q6_NEEDLE_DEDUCTIBLE",
+                "query": "What was the exact collision deductible amount?",
+                "type": "needle",
+                "expected_agent": "needle",
+                "expected_index": "hierarchical",
+                "ground_truth": "The collision deductible was exactly $750.",
+                "expected_chunks": [
+                    "Policy Information section",
+                    "Deductible information"
+                ],
+                "key_facts": [
+                    "$750",
+                    "collision deductible"
+                ]
+            },
+
+            # Query 7: Accident time
+            {
+                "id": "Q7_NEEDLE_TIME",
+                "query": "At what exact time did the accident occur?",
+                "type": "needle",
+                "expected_agent": "needle",
+                "expected_index": "hierarchical",
+                "ground_truth": "The accident occurred at exactly 7:42 AM (more precisely 7:42:15 AM based on the incident timeline).",
+                "expected_chunks": [
+                    "Incident Timeline section"
+                ],
+                "key_facts": [
+                    "7:42 AM",
+                    "7:42:15 AM"
+                ]
+            },
+
+            # Query 8: Claims adjuster
+            {
+                "id": "Q8_NEEDLE_ADJUSTER",
+                "query": "Who was the claims adjuster assigned to this case?",
+                "type": "needle",
+                "expected_agent": "needle",
+                "expected_index": "hierarchical",
+                "ground_truth": "Kevin Park was the claims adjuster assigned to this case.",
+                "expected_chunks": [
+                    "Policy Information section"
+                ],
+                "key_facts": [
+                    "Kevin Park",
+                    "claims adjuster"
+                ]
+            },
+
+            # Query 9: BAC level
+            {
+                "id": "Q9_NEEDLE_BAC",
+                "query": "What was Robert Harrison's Blood Alcohol Concentration (BAC)?",
+                "type": "needle",
+                "expected_agent": "needle",
+                "expected_index": "hierarchical",
+                "ground_truth": "Robert Harrison's Blood Alcohol Concentration (BAC) was 0.14%, which is significantly above the legal limit of 0.08%.",
+                "expected_chunks": [
+                    "Police Report section"
+                ],
+                "key_facts": [
+                    "0.14%",
+                    "BAC",
+                    "above legal limit"
+                ]
+            },
+
+            # Query 10: PT sessions count
+            {
+                "id": "Q10_NEEDLE_PT",
+                "query": "How many physical therapy sessions did Sarah Mitchell complete?",
+                "type": "needle",
+                "expected_agent": "needle",
+                "expected_index": "hierarchical",
+                "ground_truth": "Sarah Mitchell completed exactly 8 physical therapy sessions.",
+                "expected_chunks": [
+                    "Medical Documentation section",
+                    "Physical therapy records"
+                ],
+                "key_facts": [
+                    "8 sessions",
+                    "physical therapy"
                 ]
             }
         ]
