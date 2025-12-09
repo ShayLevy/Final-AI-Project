@@ -4,9 +4,9 @@
 ## Author
 
 **[Shay Levy]**\
-Course: AI Developers\
-Institution: The Institute and Ben Gurion university\
-Date: December 15, 2024
+AI Developers\
+The Institute and Ben Gurion university\
+December 15, 2024
 
 ---
 
