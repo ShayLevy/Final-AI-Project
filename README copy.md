@@ -58,11 +58,7 @@ flowchart TD
         Router[<b>Manager / Router Agent</b><br/>• Analyzes query type<br/>• Selects tools & indexes<br/>• Coordinates usage]:::router
     end
 
-    subgraph ToolsLayer [MCP Tools - Parallel Path]
-        MCP{{<b>LangChain: MCP TOOLS</b><br/>Tool-Augmented LLM<br/>---<br/>• GetDocumentMetadata<br/>• CalculateDaysBetween<br/>• EstimateCoveragePayout<br/>• ValidateClaimStatus<br/>• GetTimelineSummary}}:::tools
-    end
-
-    subgraph AgentLayer [Retrieval Path - Agent & Index Layer]
+    subgraph AgentLayer [Agent & Index Layer]
         direction TB
 
         subgraph BranchA [Summary Branch]
@@ -82,11 +78,12 @@ flowchart TD
         db_hier[(<b>Collection:</b><br/>insurance_hierarchical<br/>---<br/><b>Metadata:</b><br/>• chunk_level<br/>• parent_id<br/>• section_title<br/>• doc_type)]:::db
     end
 
-    Response([RESPONSE]):::user
+    subgraph ToolsLayer [Output & Processing]
+        MCP{{<b>LangChain: MCP TOOLS</b><br/>Tool-Augmented LLM<br/>---<br/>• GetDocumentMetadata<br/>• CalculateDaysBetween<br/>• EstimateCoveragePayout<br/>• ValidateClaimStatus<br/>• GetTimelineSummary}}:::tools
+    end
 
     %% Connections
     User --> Router
-    Router -- "Computation Query" --> MCP
     Router -- "Summary Query" --> SumAgent
     Router -- "Specific Fact" --> NeedleAgent
 
@@ -96,9 +93,8 @@ flowchart TD
     SumIndex --> db_sum
     HierIndex --> db_hier
 
-    MCP --> Response
-    db_sum --> Response
-    db_hier --> Response
+    db_sum -.-> MCP
+    db_hier -.-> MCP
 
     %% Styling Classes
     classDef user fill:#2196F3,stroke:#1565C0,stroke-width:2px,color:white
