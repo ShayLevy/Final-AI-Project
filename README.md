@@ -48,55 +48,61 @@ This project implements a production-grade insurance claim retrieval system usin
 
 ### Component Diagram
 
-```
-┌─────────────────────────────────────────────────────────────┐
-│                        USER QUERY                            │
-└─────────────────────────────────────────────────────────────┘
-                              ↓
-┌─────────────────────────────────────────────────────────────┐
-│               LANGCHAIN: Manager (Router) Agent              │
-│   • Analyzes query type (summary vs needle vs hybrid)       │
-│   • Selects appropriate tools and indexes                   │
-│   • Coordinates multi-tool usage                            │
-└─────────────────────────────────────────────────────────────┘
-                              ↓
-                    ┌─────────┴─────────┐
-                    ↓                   ↓
-┌──────────────────────────┐  ┌──────────────────────────┐
-│  LANGCHAIN:               │  │  LANGCHAIN:               │
-│  Summarization Agent      │  │  Needle Agent             │
-│  • High-level queries     │  │  • Precise fact finding   │
-│  • Timeline questions     │  │  • Small chunk search     │
-└──────────────────────────┘  └──────────────────────────┘
-           ↓                             ↓
-┌──────────────────────────┐  ┌──────────────────────────┐
-│  LLAMAINDEX:              │  │  LLAMAINDEX:              │
-│  Summary Index            │  │  Hierarchical Index       │
-│  • MapReduce summaries    │  │  • Auto-merging chunks    │
-│  • Timeline data          │  │  • Metadata filtering     │
-└──────────────────────────┘  └──────────────────────────┘
-           ↓                             ↓
-┌─────────────────────────────────────────────────────────────┐
-│                  CHROMADB VECTOR STORE                       │
-│  ┌─────────────────────┐     ┌─────────────────────────┐   │
-│  │ Collection:         │     │ Collection:             │   │
-│  │ insurance_summaries │     │ insurance_hierarchical  │   │
-│  │                     │     │                         │   │
-│  │ Metadata:           │     │ Metadata:               │   │
-│  │ • doc_type          │     │ • chunk_level           │   │
-│  │ • timestamp         │     │   (small/medium/large)  │   │
-│  │ • entities          │     │ • parent_id             │   │
-│  │                     │     │ • section_title         │   │
-│  │                     │     │ • doc_type              │   │
-│  └─────────────────────┘     └─────────────────────────┘   │
-└─────────────────────────────────────────────────────────────┘
-                              ↓
-┌─────────────────────────────────────────────────────────────┐
-│             LANGCHAIN: MCP TOOLS (Tool-Augmented LLM)        │
-│  • GetDocumentMetadata    • CalculateDaysBetween            │
-│  • EstimateCoveragePayout • ValidateClaimStatus             │
-│  • GetTimelineSummary                                        │
-└─────────────────────────────────────────────────────────────┘
+```mermaid
+flowchart TD
+
+    %% Define Nodes
+    User([USER QUERY]):::user
+
+    subgraph RouterLayer [LangChain Manager Layer]
+        Router[<b>Manager / Router Agent</b><br/>• Analyzes query type<br/>• Selects tools & indexes<br/>• Coordinates usage]:::router
+    end
+
+    subgraph AgentLayer [Agent & Index Layer]
+        direction TB
+
+        subgraph BranchA [Summary Branch]
+            SumAgent[<b>Summarization Agent</b><br/>• High-level queries<br/>• Timeline questions]:::langchain
+            SumIndex[<b>Summary Index</b><br/>• MapReduce summaries<br/>• Timeline data]:::llamaindex
+        end
+
+        subgraph BranchB [Needle Branch]
+            NeedleAgent[<b>Needle Agent</b><br/>• Precise fact finding<br/>• Small chunk search]:::langchain
+            HierIndex[<b>Hierarchical Index</b><br/>• Auto-merging chunks<br/>• Metadata filtering]:::llamaindex
+        end
+    end
+
+    subgraph StorageLayer [ChromaDB Vector Store]
+        direction LR
+        db_sum[(<b>Collection:</b><br/>insurance_summaries<br/>---<br/><b>Metadata:</b><br/>• doc_type<br/>• timestamp<br/>• entities)]:::db
+        db_hier[(<b>Collection:</b><br/>insurance_hierarchical<br/>---<br/><b>Metadata:</b><br/>• chunk_level<br/>• parent_id<br/>• section_title<br/>• doc_type)]:::db
+    end
+
+    subgraph ToolsLayer [Output & Processing]
+        MCP{{<b>LangChain: MCP TOOLS</b><br/>Tool-Augmented LLM<br/>---<br/>• GetDocumentMetadata<br/>• CalculateDaysBetween<br/>• EstimateCoveragePayout<br/>• ValidateClaimStatus<br/>• GetTimelineSummary}}:::tools
+    end
+
+    %% Connections
+    User --> Router
+    Router -- "Summary Query" --> SumAgent
+    Router -- "Specific Fact" --> NeedleAgent
+
+    SumAgent --> SumIndex
+    NeedleAgent --> HierIndex
+
+    SumIndex --> db_sum
+    HierIndex --> db_hier
+
+    db_sum -.-> MCP
+    db_hier -.-> MCP
+
+    %% Styling Classes
+    classDef user fill:#2196F3,stroke:#1565C0,stroke-width:2px,color:white
+    classDef router fill:#E3F2FD,stroke:#2196F3,stroke-width:2px,color:#0D47A1
+    classDef langchain fill:#E8F5E9,stroke:#4CAF50,stroke-width:2px,color:#1B5E20
+    classDef llamaindex fill:#FFF3E0,stroke:#FF9800,stroke-width:2px,color:#E65100
+    classDef db fill:#F3E5F5,stroke:#9C27B0,stroke-width:2px,color:#4A148C
+    classDef tools fill:#FFEBEE,stroke:#EF5350,stroke-width:2px,color:#B71C1C
 ```
 
 ### Technology Stack
