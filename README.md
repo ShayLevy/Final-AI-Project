@@ -651,11 +651,11 @@ pip install -r requirements.txt
 # 4. Set up environment variables
 echo "OPENAI_API_KEY=your-api-key-here" > .env
 
-# 5. (First run) Build indexes
-python main.py
+# 5. Run the application
+streamlit run streamlit_app.py
 
-# System will load documents and build ChromaDB indexes
-# This takes ~2-3 minutes on first run
+# Upload a PDF and the system will build ChromaDB indexes automatically
+# First-time indexing takes ~2-3 minutes
 ```
 
 ### Environment Variables
