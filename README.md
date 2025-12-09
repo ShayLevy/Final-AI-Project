@@ -719,32 +719,6 @@ print(result["output"])
 
 ### Running Evaluation
 
-There are two ways to test the LLM-as-a-Judge evaluation:
-
-#### Option 1: Command Line (run_evaluation.py)
-
-```bash
-python run_evaluation.py
-```
-
-This will:
-1. Initialize the Insurance Claim System
-2. Run all 10 predefined test queries from `src/evaluation/test_queries.py`
-3. Evaluate each response using **Anthropic Claude** as judge (independent from GPT-4 generation)
-4. Calculate aggregate scores (Correctness, Relevancy, Recall)
-5. Save detailed results to `./evaluation_results/evaluation_results_YYYYMMDD_HHMMSS.json`
-6. Display a summary with performance grade (A-F)
-
-**Output**:
-- Console: Real-time evaluation progress
-- File: `./evaluation_results/evaluation_results_YYYYMMDD_HHMMSS.json`
-
-#### Option 2: Streamlit UI (RAGAS Evaluation Tab)
-
-```bash
-streamlit run streamlit_app.py
-```
-
 Navigate to the **"RAGAS Evaluation"** tab:
 1. The 10 test queries are **auto-loaded** when you visit the tab
 2. Choose evaluation method: **RAGAS (GPT-4o-mini)** or **LLM-as-a-Judge (Claude)**
