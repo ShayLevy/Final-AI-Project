@@ -677,21 +677,32 @@ else:
                 rebuild_indexes=False
             )
 
-    # Initialize active tab in session state
-    if 'active_main_tab' not in st.session_state:
-        st.session_state.active_main_tab = "🔍 Query"
-
-    # Create tab selector using radio buttons (maintains state across reruns)
+    # Tab options and mapping for URL persistence
     tab_options = ["🔍 Query", "📚 Browse Vector DB", "📊 RAGAS Evaluation"]
+    tab_url_map = {"query": 0, "browse": 1, "eval": 2}
+    url_tab_map = {0: "query", 1: "browse", 2: "eval"}
+
+    # Get tab from URL query params (persists across refresh)
+    query_params = st.query_params
+    url_tab = query_params.get("tab", "query")
+    default_tab_index = tab_url_map.get(url_tab, 0)
+
+    # Create tab selector using radio buttons
     selected_tab = st.radio(
         "Navigation",
         tab_options,
-        index=tab_options.index(st.session_state.active_main_tab),
+        index=default_tab_index,
         horizontal=True,
         label_visibility="collapsed",
         key="main_tab_selector"
     )
-    st.session_state.active_main_tab = selected_tab
+
+    # Update URL when tab changes
+    new_tab_index = tab_options.index(selected_tab)
+    new_url_tab = url_tab_map[new_tab_index]
+    if query_params.get("tab") != new_url_tab:
+        st.query_params["tab"] = new_url_tab
+
     st.divider()
 
     # ==========================================================================
@@ -1179,6 +1190,9 @@ else:
                 # Dynamic button label based on selected evaluation method
                 button_label = "Run RAGAS Evaluation" if eval_method == "RAGAS (OpenAI GPT-4o-mini)" else "Run LLM-as-a-Judge"
                 run_eval = st.button(button_label, type="primary", use_container_width=True)
+
+            # Warning about tab switching
+            st.warning("**Important:** Do not switch tabs or interact with other UI elements while evaluation is running. This will interrupt the process.")
 
             if run_eval and selected_count > 0:
                 # Determine which evaluation method to use
