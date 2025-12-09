@@ -886,14 +886,14 @@ The 10 test queries cover different system capabilities:
 ```
 Midterm-Coding-Assignment/
 ├── data/
-│   └── insurance_claim_CLM2024001.txt    # Claim document
+│   └── insurance_claim_CLM2024001.pdf    # Insurance claim PDF document
 ├── src/
 │   ├── vector_store/
 │   │   ├── __init__.py
 │   │   └── setup.py                       # ChromaDB management
 │   ├── indexing/
 │   │   ├── __init__.py
-│   │   ├── document_loader.py             # Document parsing
+│   │   ├── document_loader.py             # PDF/document parsing
 │   │   ├── chunking.py                    # Hierarchical chunking
 │   │   └── build_indexes.py               # Index builders
 │   ├── retrieval/
@@ -910,16 +910,15 @@ Midterm-Coding-Assignment/
 │   │   └── tools.py                       # MCP tools
 │   └── evaluation/
 │       ├── __init__.py
-│       ├── judge.py                       # LLM-as-a-judge
-│       └── test_queries.py                # Test suite
-├── diagrams/
-│   └── architecture.png                   # System diagram
+│       ├── judge.py                       # LLM-as-a-judge (Anthropic Claude)
+│       └── test_queries.py                # Test suite (10 queries)
 ├── chroma_db/                            # Vector store (auto-created)
 ├── evaluation_results/                   # Eval outputs (auto-created)
+├── streamlit_app.py                      # Streamlit web interface
 ├── main.py                               # Main orchestrator
-├── run_evaluation.py                     # Evaluation runner
+├── run_evaluation.py                     # CLI evaluation runner
 ├── requirements.txt                      # Dependencies
-├── .env                                  # Environment variables
+├── .env                                  # API keys (OPENAI, ANTHROPIC)
 └── README.md                             # This file
 ```
 
