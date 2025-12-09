@@ -2,12 +2,12 @@
 ## GenAI Multi-Agent System with Hierarchical Indexing and MCP Integration
 
 **Course**: Midterm Coding Assignment
-**Student**: [Your Name]
+**Student**: Shay Levy
 **Submission Date**: December 15, 2024
 
 ---
 
-## 📋 Table of Contents
+## Table of Contents
 
 1. [Overview](#overview)
 2. [System Architecture](#system-architecture)
@@ -22,7 +22,7 @@
 
 ---
 
-## 🎯 Overview
+## Overview
 
 This project implements a production-grade insurance claim retrieval system using:
 
@@ -42,7 +42,7 @@ This project implements a production-grade insurance claim retrieval system usin
 
 ---
 
-## 🏗️ System Architecture
+## System Architecture
 
 ### Component Diagram
 
@@ -111,7 +111,7 @@ This project implements a production-grade insurance claim retrieval system usin
 
 ---
 
-## 📊 Data Management & Indexing
+## Data Management & Indexing
 
 ### Document Structure
 
@@ -251,7 +251,7 @@ Query: "What was the exact collision deductible?"
 
 ---
 
-## 🤖 Agent Design
+## Agent Design
 
 ### 1. Manager (Router) Agent
 
@@ -357,7 +357,7 @@ results = retriever.retrieve_by_section(
 
 ---
 
-## 🔧 MCP Integration
+## MCP Integration
 
 **Model Context Protocol (MCP)** extends the LLM beyond static knowledge via tool calls.
 
@@ -481,7 +481,7 @@ manager_agent = ManagerAgent(tools=retrieval_tools + mcp_tools)
 
 ---
 
-## 📈 Evaluation Methodology
+## Evaluation Methodology
 
 ### LLM-as-a-Judge Framework
 
@@ -614,7 +614,7 @@ Success Rate: 8/8 queries (100%)
 
 ---
 
-## 🚀 Installation & Setup
+## Installation & Setup
 
 ### Prerequisites
 
@@ -662,7 +662,7 @@ ANTHROPIC_API_KEY=...your-anthropic-key-here...
 
 ---
 
-## 💻 Usage Examples
+## Usage Examples
 
 ### Interactive Mode
 
@@ -765,7 +765,7 @@ The 10 test queries cover different system capabilities:
 
 ---
 
-## 📊 Results & Findings
+## Results & Findings
 
 ### Performance Metrics
 
@@ -811,7 +811,7 @@ The 10 test queries cover different system capabilities:
 
 ---
 
-## ⚖️ Limitations & Trade-offs
+## Limitations & Trade-offs
 
 ### Limitations
 
@@ -869,7 +869,7 @@ The 10 test queries cover different system capabilities:
 
 ---
 
-## 📁 Project Structure
+## Project Structure
 
 ```
 Midterm-Coding-Assignment/
@@ -913,7 +913,7 @@ Midterm-Coding-Assignment/
 
 ---
 
-## 🎓 Educational Value
+## Educational Value
 
 This project demonstrates real-world GenAI engineering skills:
 
@@ -927,7 +927,7 @@ This project demonstrates real-world GenAI engineering skills:
 
 ---
 
-## 📚 References
+## References
 
 1. LlamaIndex Documentation: https://docs.llamaindex.ai/
 2. LangChain Documentation: https://python.langchain.com/
@@ -937,17 +937,17 @@ This project demonstrates real-world GenAI engineering skills:
 
 ---
 
-## 📝 License
+## License
 
 This project is submitted as academic coursework for educational purposes.
 
 ---
 
-## 👤 Author
+## Author
 
-**[Your Name]**
+**[Shay Levy]**
 Course: [Course Name]
-Institution: [University Name]
+Institution: [The Institute - BGU]
 Date: December 15, 2024
 
 ---
