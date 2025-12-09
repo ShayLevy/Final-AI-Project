@@ -1123,10 +1123,9 @@ else:
             {"question": "Who were the witnesses and what did they observe?", "ground_truth": "There were three witnesses: Marcus Thompson (rideshare driver) saw Harrison's Camry run a red light at high speed without braking. Elena Rodriguez (pedestrian) observed the Camry had a red light for 3-4 seconds before entering the intersection and noted Harrison appeared intoxicated after the crash. Patricia O'Brien (RN, commuter) confirmed the traffic signal timing and noted sunrise was at 6:58 AM with normal lighting conditions.", "category": "Summary"},
         ]
 
-        all_predefined_cases = predefined_cases
-
-        if st.button("Load Questions", type="primary"):
-            st.session_state.ragas_test_cases = all_predefined_cases.copy()
+        # Auto-load predefined test cases on first visit
+        if not st.session_state.ragas_test_cases:
+            st.session_state.ragas_test_cases = predefined_cases.copy()
 
         # Display current test cases
         if st.session_state.ragas_test_cases:
