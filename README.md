@@ -531,7 +531,7 @@ Using the same model for both generation and evaluation creates **evaluation bia
 ```bash
 # .env file
 OPENAI_API_KEY=sk-...      # For RAG system (generation + embeddings + RAGAS)
-ANTHROPIC_API_KEY=...      # For CLI LLM-as-a-Judge evaluation
+ANTHROPIC_API_KEY=...      # For LLM-as-a-Judge evaluation
 ```
 
 ### Evaluation Metrics
@@ -730,7 +730,7 @@ python run_evaluation.py
 This will:
 1. Initialize the Insurance Claim System
 2. Run all 10 predefined test queries from `src/evaluation/test_queries.py`
-3. Evaluate each response using GPT-4 as a judge
+3. Evaluate each response using **Anthropic Claude** as judge (independent from GPT-4 generation)
 4. Calculate aggregate scores (Correctness, Relevancy, Recall)
 5. Save detailed results to `./evaluation_results/evaluation_results_YYYYMMDD_HHMMSS.json`
 6. Display a summary with performance grade (A-F)
@@ -745,18 +745,26 @@ This will:
 streamlit run streamlit_app.py
 ```
 
-Navigate to the **"RAGAS Evaluation"** tab to:
-1. Click **"Load Questions"** to load the same 10 test queries used by `run_evaluation.py`
-2. Select/deselect individual test cases using the checkbox column
-3. Click **"Run RAGAS Evaluation"** to execute the evaluation
-4. View results with color-coded scores (green/yellow/red)
-5. Export results to CSV
+Navigate to the **"RAGAS Evaluation"** tab:
+1. The 10 test queries are **auto-loaded** when you visit the tab
+2. Choose evaluation method: **RAGAS (GPT-4o-mini)** or **LLM-as-a-Judge (Claude)**
+3. Select/deselect individual test cases using the checkbox column
+4. Click the evaluation button to run
+5. View results with color-coded scores and improvement recommendations
+6. Export results to CSV
 
-**RAGAS Metrics:**
+**Note:** Do not switch tabs while evaluation is running - this will interrupt the process.
+
+**RAGAS Metrics** (GPT-4o-mini):
 - **Faithfulness**: Is the answer grounded in the retrieved context?
 - **Answer Relevancy**: Is the answer relevant to the question?
 - **Context Precision**: Are the retrieved chunks relevant?
 - **Context Recall**: Does the context contain the information needed?
+
+**LLM-as-a-Judge Metrics** (Claude):
+- **Correctness**: Does the answer match the ground truth?
+- **Relevancy**: Is the retrieved context relevant?
+- **Recall**: Were all necessary chunks retrieved?
 
 #### Test Query Categories
 
