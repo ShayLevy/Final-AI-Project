@@ -42,9 +42,8 @@ This project implements a production-grade insurance claim retrieval system usin
 ✅ Route queries intelligently to appropriate retrieval strategies \
 ✅ Evaluate system performance objectively using separate judge model \
 
----
 
-## Educational Value
+### Educational Value
 
 This project demonstrates real-world GenAI engineering skills:
 
