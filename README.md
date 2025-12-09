@@ -1,9 +1,12 @@
 # Insurance Claim Timeline Retrieval System
 ## GenAI Multi-Agent System with Hierarchical Indexing and MCP Integration
 
-**Course**: Midterm Coding Assignment
-**Student**: Shay Levy
-**Submission Date**: December 15, 2024
+## Author
+
+**[Shay Levy]**\
+Course: AI Developers\
+Institution:  The Institute for Artificial Intelligence - BGU\
+Date: December 15, 2024
 
 ---
 
@@ -941,15 +944,5 @@ This project demonstrates real-world GenAI engineering skills:
 
 This project is submitted as academic coursework for educational purposes.
 
----
 
-## Author
 
-**[Shay Levy]**
-Course: [Course Name]
-Institution: [The Institute - BGU]
-Date: December 15, 2024
-
----
-
-**End of README**
