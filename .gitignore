@@ -48,6 +48,7 @@ evaluation_results/
 # OS
 .DS_Store
 Thumbs.db
+venv.txt
 
 # Jupyter Notebooks
 .ipynb_checkpoints/
