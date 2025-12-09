@@ -32,6 +32,38 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
+# Scroll to top if flagged (after indexing completes)
+if st.session_state.get('scroll_to_top', False):
+    st.session_state.scroll_to_top = False
+    # Add anchor at the very top for scrolling
+    st.markdown('<div id="top-anchor"></div>', unsafe_allow_html=True)
+    js_scroll = """
+    <script>
+        const tryScroll = () => {
+            try {
+                // Find the title element and scroll to it
+                const title = window.parent.document.querySelector('h1');
+                if (title) {
+                    title.scrollIntoView({behavior: 'instant', block: 'start'});
+                    return;
+                }
+                // Fallback: scroll the main container
+                const main = window.parent.document.querySelector('[data-testid="stMain"]');
+                if (main) {
+                    main.scrollTo(0, 0);
+                }
+            } catch(e) {
+                console.log('Scroll error:', e);
+            }
+        };
+        // Try immediately and after delays
+        tryScroll();
+        setTimeout(tryScroll, 50);
+        setTimeout(tryScroll, 200);
+    </script>
+    """
+    st.components.v1.html(js_scroll, height=0)
+
 # Custom CSS
 st.markdown("""
 <style>
@@ -90,6 +122,59 @@ st.markdown("""
     /* Hide the clear button container */
     [data-baseweb="select"] > div > div:last-child > div:first-child {
         display: none !important;
+    }
+
+    /* ========== TAB-STYLE RADIO BUTTONS ========== */
+    /* Tab container styling */
+    div[data-testid="stRadio"] > div[role="radiogroup"] {
+        display: flex;
+        gap: 8px;
+        background-color: transparent;
+        padding: 0;
+        border-bottom: 2px solid #e0e0e0;
+    }
+
+    /* Individual tab buttons */
+    div[data-testid="stRadio"] > div[role="radiogroup"] > label {
+        background-color: transparent;
+        border-radius: 0;
+        padding: 8px 20px !important;
+        font-weight: 400;
+        font-size: 14px;
+        color: #666;
+        border: none;
+        border-bottom: 2px solid transparent;
+        margin-bottom: -2px;
+        cursor: pointer;
+        transition: all 0.2s ease;
+        border-right: 1px solid #ddd;
+    }
+
+    /* Remove separator from last tab */
+    div[data-testid="stRadio"] > div[role="radiogroup"] > label:last-child {
+        border-right: none;
+    }
+
+    /* Tab hover state */
+    div[data-testid="stRadio"] > div[role="radiogroup"] > label:hover {
+        color: #333;
+    }
+
+    /* Active/selected tab */
+    div[data-testid="stRadio"] > div[role="radiogroup"] > label[data-checked="true"] {
+        background-color: transparent !important;
+        color: #667eea !important;
+        font-weight: 600 !important;
+        border-bottom: 2px solid #667eea !important;
+    }
+
+    /* Flashing warning animation */
+    @keyframes flash-warning {
+        0%, 100% { opacity: 1; }
+        50% { opacity: 0.5; }
+    }
+    .flash-warning {
+        animation: flash-warning 1.5s ease-in-out infinite;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -423,17 +508,6 @@ with st.sidebar:
             st.caption(f"🕐 Last updated: {db_status['last_modified']}")
 
         st.divider()
-        st.markdown("""
-        <p style="font-weight: 600; font-size: 16px; margin-bottom: 5px;">Workflow</p>
-        <div style="line-height: 1.4; font-size: 14px;">
-        <span style="color: #888; text-decoration: line-through;">1. 📄 Upload PDF</span> ✓<br>
-        <span style="color: #888; text-decoration: line-through;">2. ⚙️ Configure Chunks</span> ✓<br>
-        <span style="color: #888; text-decoration: line-through;">3. 💾 Index to Database</span> ✓<br>
-        <strong>4. 🔍 Query the System</strong> ←
-        </div>
-        """, unsafe_allow_html=True)
-
-        st.divider()
         st.subheader("Indexes")
         for col in db_status['collections']:
             st.markdown(f"**{col['name']}**: {col['count']} items")
@@ -453,9 +527,6 @@ with st.sidebar:
             st.session_state.system = None
             st.rerun()
     else:
-        st.info("📄 Upload a PDF document to create the vector index.")
-
-        st.divider()
         st.markdown("""
         <p style="font-weight: 600; font-size: 16px; margin-bottom: 5px;">Workflow</p>
         <div style="line-height: 1.4; font-size: 14px;">
@@ -667,9 +738,24 @@ if not db_status['exists']:
 
             st.caption("This will create embeddings and store chunks in ChromaDB. This process calls the OpenAI API.")
 
+            # Initialize indexing state
+            if 'indexing_in_progress' not in st.session_state:
+                st.session_state.indexing_in_progress = False
+
+            # Create placeholder for progress
+            progress_placeholder = st.empty()
+
             col1, col2 = st.columns([1, 3])
             with col1:
-                if st.button("Index Document", type="primary", use_container_width=True):
+                # Only show button if not currently indexing
+                if not st.session_state.indexing_in_progress:
+                    if st.button("Index Document", type="primary", use_container_width=True):
+                        st.session_state.indexing_in_progress = True
+                        st.rerun()
+
+            # Handle indexing in a separate block
+            if st.session_state.indexing_in_progress:
+                with progress_placeholder.container():
                     progress = st.progress(0, text="Starting indexing...")
 
                     try:
@@ -681,9 +767,15 @@ if not db_status['exists']:
                         )
                         progress.progress(100, text="Complete!")
                         st.success("Document indexed successfully!")
+                        st.session_state.indexing_in_progress = False
+                        # Reset to Query tab after indexing
+                        st.query_params["tab"] = "query"
+                        # Flag to scroll to top after rerun
+                        st.session_state.scroll_to_top = True
                         time.sleep(1)
                         st.rerun()
                     except Exception as e:
+                        st.session_state.indexing_in_progress = False
                         st.error(f"Indexing failed: {str(e)}")
 
 else:
@@ -702,7 +794,7 @@ else:
                 rebuild_indexes=False
             )
 
-    # Tab options and mapping for URL persistence
+    # Tab options and URL persistence
     tab_options = ["🔍 Query", "📚 Browse Vector DB", "📊 RAGAS Evaluation"]
     tab_url_map = {"query": 0, "browse": 1, "eval": 2}
     url_tab_map = {0: "query", 1: "browse", 2: "eval"}
@@ -712,7 +804,7 @@ else:
     url_tab = query_params.get("tab", "query")
     default_tab_index = tab_url_map.get(url_tab, 0)
 
-    # Create tab selector using radio buttons
+    # Create tab-styled radio buttons
     selected_tab = st.radio(
         "Navigation",
         tab_options,
@@ -727,8 +819,6 @@ else:
     new_url_tab = url_tab_map[new_tab_index]
     if query_params.get("tab") != new_url_tab:
         st.query_params["tab"] = new_url_tab
-
-    st.divider()
 
     # ==========================================================================
     # TAB 1: Query Interface
@@ -1211,10 +1301,27 @@ else:
                 button_label = "Run RAGAS Evaluation" if eval_method == "RAGAS (OpenAI GPT-4o-mini)" else "Run LLM-as-a-Judge"
                 run_eval = st.button(button_label, type="primary", use_container_width=True)
 
-            # Warning about tab switching
-            st.warning("**Important:** Do not switch tabs or interact with other UI elements while evaluation is running. This will interrupt the process.")
+            # Initialize evaluation running state
+            if 'evaluation_running' not in st.session_state:
+                st.session_state.evaluation_running = False
+
+            # Show flashing warning only during evaluation
+            warning_placeholder = st.empty()
+            if st.session_state.evaluation_running:
+                warning_placeholder.markdown(
+                    '<div class="flash-warning" style="background-color: #fff3cd; border: 1px solid #ffc107; border-radius: 4px; padding: 12px; margin: 10px 0;">'
+                    '<strong>⚠️ Important:</strong> Do not switch tabs or interact with other UI elements while evaluation is running. This will interrupt the process.'
+                    '</div>',
+                    unsafe_allow_html=True
+                )
 
             if run_eval and selected_count > 0:
+                # Set evaluation running state
+                st.session_state.evaluation_running = True
+                st.rerun()
+
+            # Handle evaluation in separate block (after rerun with state set)
+            if st.session_state.evaluation_running and selected_count > 0:
                 # Determine which evaluation method to use
                 is_ragas = eval_method == "RAGAS (OpenAI GPT-4o-mini)"
                 spinner_text = "Running RAGAS evaluation..." if is_ragas else "Running LLM-as-a-Judge evaluation (Claude)..."
@@ -1367,9 +1474,11 @@ else:
                             st.session_state.ragas_results = None
 
                         st.success("Evaluation complete!")
+                        st.session_state.evaluation_running = False
                         st.rerun()
 
                     except ImportError as e:
+                        st.session_state.evaluation_running = False
                         st.error(f"""
                         Required packages not installed. Please install:
                         ```
@@ -1378,6 +1487,7 @@ else:
                         Error: {e}
                         """)
                     except Exception as e:
+                        st.session_state.evaluation_running = False
                         st.error(f"Evaluation error: {str(e)}")
                         import traceback
                         st.code(traceback.format_exc())
@@ -1810,22 +1920,33 @@ else:
                         faith = sum(faith) / len(faith) if faith else 0
                     row['Faithfulness'] = f"{faith:.1%}" if faith is not None else 'N/A'
 
-                    relevancy = scores.get('answer_relevancy')
-                    if isinstance(relevancy, list):
-                        relevancy = sum(relevancy) / len(relevancy) if relevancy else 0
-                    row['Relevancy'] = f"{relevancy:.1%}" if relevancy is not None else 'N/A'
+                    ans_rel = scores.get('answer_relevancy')
+                    if isinstance(ans_rel, list):
+                        ans_rel = sum(ans_rel) / len(ans_rel) if ans_rel else 0
+                    row['Answer Rel.'] = f"{ans_rel:.1%}" if ans_rel is not None else 'N/A'
 
                     precision = scores.get('context_precision')
                     if isinstance(precision, list):
                         precision = sum(precision) / len(precision) if precision else 0
-                    row['Precision'] = f"{precision:.1%}" if precision is not None else 'N/A'
+                    row['Ctx Precision'] = f"{precision:.1%}" if precision is not None else 'N/A'
 
+                    recall = scores.get('context_recall')
+                    if isinstance(recall, list):
+                        recall = sum(recall) / len(recall) if recall else 0
+                    row['Ctx Recall'] = f"{recall:.1%}" if recall is not None else 'N/A'
+
+                    # LLM-as-a-Judge columns (N/A for RAGAS)
                     row['Correctness'] = 'N/A'
+                    row['Relevancy'] = 'N/A'
                     row['Average'] = 'N/A'
                 else:
-                    # LLM-as-a-Judge scores (1-5 scale)
+                    # RAGAS columns (N/A for LLM-as-a-Judge)
                     row['Faithfulness'] = 'N/A'
-                    row['Precision'] = 'N/A'
+                    row['Answer Rel.'] = 'N/A'
+                    row['Ctx Precision'] = 'N/A'
+                    row['Ctx Recall'] = 'N/A'
+
+                    # LLM-as-a-Judge scores (1-5 scale)
                     row['Correctness'] = f"{scores.get('correctness', 0):.2f}/5"
                     row['Relevancy'] = f"{scores.get('relevancy', 0):.2f}/5"
                     row['Average'] = f"{scores.get('average', 0):.2f}/5"
