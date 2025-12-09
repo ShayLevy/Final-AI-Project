@@ -5,7 +5,7 @@
 
 **[Shay Levy]**\
 Course: AI Developers\
-Institution:  The Institute for Artificial Intelligence - BGU\
+Institution: The Institute and Ben Gurion university\
 Date: December 15, 2024
 
 ---
