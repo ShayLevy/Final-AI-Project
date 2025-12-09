@@ -36,11 +36,11 @@ This project implements a production-grade insurance claim retrieval system usin
 
 ### Key Capabilities
 
-✅ Answer high-level summary questions using timeline-oriented index
-✅ Find precise facts (dates, amounts, names) using hierarchical chunks
-✅ Perform computations via MCP tools
-✅ Route queries intelligently to appropriate retrieval strategies
-✅ Evaluate system performance objectively using separate judge model
+✅ Answer high-level summary questions using timeline-oriented index \
+✅ Find precise facts (dates, amounts, names) using hierarchical chunks \
+✅ Perform computations via MCP tools \
+✅ Route queries intelligently to appropriate retrieval strategies \
+✅ Evaluate system performance objectively using separate judge model \
 
 ---
 
@@ -603,15 +603,15 @@ Success Rate: 8/8 queries (100%)
 
 ### Strengths Observed
 
-✅ **Excellent summary performance** - MapReduce strategy works well
-✅ **High precision on needle queries** - Small chunks effective
-✅ **MCP tools reduce hallucination** - Calculations are accurate
+✅ **Excellent summary performance** - MapReduce strategy works well \
+✅ **High precision on needle queries** - Small chunks effective \
+✅ **MCP tools reduce hallucination** - Calculations are accurate \
 ✅ **Intelligent routing** - Manager agent correctly classifies queries
 
 ### Weaknesses Observed
 
-⚠️ **Sparse data retrieval** - Patricia O'Brien query required deeper search
-⚠️ **Context expansion timing** - Auto-merging sometimes over-retrieves
+⚠️ **Sparse data retrieval** - Patricia O'Brien query required deeper search \
+⚠️ **Context expansion timing** - Auto-merging sometimes over-retrieves \
 ⚠️ **Cost** - GPT-4 for both system and judge is expensive
 
 ---
@@ -919,12 +919,12 @@ Midterm-Coding-Assignment/
 
 This project demonstrates real-world GenAI engineering skills:
 
-✅ **RAG Architecture**: Production-grade retrieval-augmented generation
-✅ **Multi-Agent Systems**: Coordinated specialist agents
-✅ **Vector Databases**: ChromaDB with metadata filtering
-✅ **Evaluation Rigor**: LLM-as-a-judge methodology
-✅ **Tool Integration**: MCP tools for extended capabilities
-✅ **Design Decisions**: Documented trade-offs and rationale
+✅ **RAG Architecture**: Production-grade retrieval-augmented generation \
+✅ **Multi-Agent Systems**: Coordinated specialist agents \
+✅ **Vector Databases**: ChromaDB with metadata filtering \
+✅ **Evaluation Rigor**: LLM-as-a-judge methodology \
+✅ **Tool Integration**: MCP tools for extended capabilities \
+✅ **Design Decisions**: Documented trade-offs and rationale \
 ✅ **Professional Code**: Modular, documented, testable
 
 ---
