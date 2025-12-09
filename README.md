@@ -508,7 +508,7 @@ We use **separate models** for generation and evaluation to ensure unbiased asse
 
 ### Two Evaluation Methods
 
-1. **LLM-as-a-Judge (CLI)** - `python run_evaluation.py`
+1. **LLM-as-a-Judge**
    - Uses **Anthropic Claude** as judge (completely different provider)
    - Custom evaluation prompts for Correctness, Relevancy, Recall
    - Truly independent evaluation
