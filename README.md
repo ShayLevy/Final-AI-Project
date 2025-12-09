@@ -669,7 +669,7 @@ ANTHROPIC_API_KEY=...your-anthropic-key-here...
 ### Interactive Mode
 
 ```bash
-python main.py
+streamlit run streamlit_app.py
 ```
 
 **Example Session**:
