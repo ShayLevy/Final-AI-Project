@@ -44,6 +44,20 @@ This project implements a production-grade insurance claim retrieval system usin
 
 ---
 
+## Educational Value
+
+This project demonstrates real-world GenAI engineering skills:
+
+✅ **RAG Architecture**: Production-grade retrieval-augmented generation \
+✅ **Multi-Agent Systems**: Coordinated specialist agents \
+✅ **Vector Databases**: ChromaDB with metadata filtering \
+✅ **Evaluation Rigor**: LLM-as-a-judge methodology \
+✅ **Tool Integration**: MCP tools for extended capabilities \
+✅ **Design Decisions**: Documented trade-offs and rationale \
+✅ **Professional Code**: Modular, documented, testable
+
+---
+
 ## System Architecture
 
 ### Component Diagram
@@ -795,13 +809,13 @@ The 10 test queries cover different system capabilities:
 
 ### Cost Analysis
 
-**Per-Query Cost** (GPT-4):
-- Summary query: ~$0.02
-- Needle query: ~$0.01
-- Evaluation (judge): ~$0.03
-- **Total**: ~$0.06 per query-evaluation pair
+**Per-Query Cost**:
+- Generation (GPT-4): ~$0.02-0.03
+- Evaluation - RAGAS (GPT-4o-mini): ~$0.01
+- Evaluation - LLM-as-a-Judge (Claude): ~$0.02
+- **Total**: ~$0.04-0.05 per query-evaluation pair
 
-**Full Evaluation (8 queries)**: ~$0.48
+**Full Evaluation (10 queries)**: ~$0.40-0.50
 
 ---
 
@@ -863,27 +877,13 @@ The 10 test queries cover different system capabilities:
 
 ---
 
-## Educational Value
-
-This project demonstrates real-world GenAI engineering skills:
-
-✅ **RAG Architecture**: Production-grade retrieval-augmented generation \
-✅ **Multi-Agent Systems**: Coordinated specialist agents \
-✅ **Vector Databases**: ChromaDB with metadata filtering \
-✅ **Evaluation Rigor**: LLM-as-a-judge methodology \
-✅ **Tool Integration**: MCP tools for extended capabilities \
-✅ **Design Decisions**: Documented trade-offs and rationale \
-✅ **Professional Code**: Modular, documented, testable
-
----
 
 ## References
 
 1. LlamaIndex Documentation: https://docs.llamaindex.ai/
 2. LangChain Documentation: https://python.langchain.com/
 3. ChromaDB Documentation: https://docs.trychroma.com/
-4. "Retrieval-Augmented Generation for Knowledge-Intensive NLP Tasks" (Lewis et al., 2020)
-5. "Auto-Merging Retriever" - LlamaIndex Concept: https://docs.llamaindex.ai/en/stable/examples/retrievers/auto_merging_retriever.html
+4. "Auto-Merging Retriever" - LlamaIndex Concept: https://docs.llamaindex.ai/en/stable/examples/retrievers/auto_merging_retriever.html
 
 ---
 
