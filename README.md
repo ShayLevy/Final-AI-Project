@@ -880,16 +880,16 @@ The 10 test queries are split evenly between Summary and Needle types:
 
 | # | Category | Query | Tests |
 |---|----------|-------|-------|
-| 1 | Summary | "What is this insurance claim about?" | Summary Index, MapReduce |
-| 2 | Summary | "Provide a timeline of key events..." | Timeline extraction |
+| 1 | Summary | "What is this insurance claim about? Provide a summary." | Summary Index, MapReduce |
+| 2 | Summary | "Provide a timeline of key events from the incident through vehicle return." | Timeline extraction |
 | 3 | Summary | "Who were the witnesses and what did they observe?" | Summary retrieval |
-| 4 | Summary | "Summarize the medical treatment..." | Medical documentation |
+| 4 | Summary | "Summarize the medical treatment Sarah Mitchell received." | Medical documentation |
 | 5 | Summary | "What was the outcome of the liability determination?" | Liability section |
-| 6 | Needle | "What was the exact collision deductible?" | Small chunks, precision |
+| 6 | Needle | "What was the exact collision deductible amount?" | Small chunks, precision |
 | 7 | Needle | "At what exact time did the accident occur?" | Specific fact finding |
-| 8 | Needle | "Who was the claims adjuster?" | Entity extraction |
-| 9 | Needle | "What was Robert Harrison's BAC?" | Precise fact extraction |
-| 10 | Needle | "How many physical therapy sessions?" | Numerical fact extraction |
+| 8 | Needle | "Who was the claims adjuster assigned to this case?" | Entity extraction |
+| 9 | Needle | "What was Robert Harrison's Blood Alcohol Concentration (BAC)?" | Precise fact extraction |
+| 10 | Needle | "How many physical therapy sessions did Sarah Mitchell complete?" | Numerical fact extraction |
 
 ---
 
