@@ -512,6 +512,13 @@ db_status = check_chroma_exists()
 # SIDEBAR - Status & Controls
 # =============================================================================
 with st.sidebar:
+    # Logo at the top (centered)
+    logo_path = Path("./logo.png")
+    if logo_path.exists():
+        col1, col2, col3 = st.columns([1, 6, 1])
+        with col2:
+            st.image(str(logo_path), width=200)
+
     # Header with status icon and tooltip showing path
     status_icon = "🟢" if db_status['exists'] else "🔴"
     tooltip_text = db_status.get('path', 'No database') if db_status['exists'] else 'No database found'
