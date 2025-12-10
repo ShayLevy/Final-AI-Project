@@ -3,7 +3,7 @@
 
 ## Author
 
-**Shay Levy (023792732)** \
+**Shay Levy** \
 AI Developers - The Institute and Ben Gurion university\
 December 15, 2024
 
