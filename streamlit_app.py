@@ -71,9 +71,34 @@ st.markdown("""
     .block-container {
         padding-top: 1rem !important;
     }
-    /* Reduce top padding from sidebar */
+    /* Remove top padding from sidebar */
     [data-testid="stSidebar"] > div:first-child {
-        padding-top: 0.5rem !important;
+        padding-top: 0 !important;
+    }
+    [data-testid="stSidebar"] [data-testid="stVerticalBlock"] {
+        padding-top: 0 !important;
+        gap: 0 !important;
+    }
+    [data-testid="stSidebar"] .block-container {
+        padding-top: 0 !important;
+    }
+    /* Hide sidebar collapse button completely */
+    [data-testid="collapsedControl"],
+    [data-testid="stSidebarCollapseButton"],
+    [data-testid="baseButton-header"],
+    [data-testid="stSidebarNavCollapseIcon"],
+    button[kind="header"],
+    button[kind="headerNoPadding"],
+    .stSidebarCollapse,
+    div[data-testid="stSidebarCollapsedControl"],
+    section[data-testid="stSidebar"] > button,
+    [data-testid="stSidebar"] > div:first-child > button,
+    .st-emotion-cache-1gwvy71 {
+        display: none !important;
+        visibility: hidden !important;
+        width: 0 !important;
+        height: 0 !important;
+        pointer-events: none !important;
     }
     .status-box {
         padding: 8px 12px;
@@ -512,23 +537,18 @@ db_status = check_chroma_exists()
 # SIDEBAR - Status & Controls
 # =============================================================================
 with st.sidebar:
-    # Logo at the top (centered)
+    # Logo at the top (full width, no margins)
     logo_path = Path("./logo.png")
     if logo_path.exists():
-        col1, col2, col3 = st.columns([1, 6, 1])
-        with col2:
-            st.image(str(logo_path), width=200)
-
-    # Header with status icon and tooltip showing path
-    status_icon = "🟢" if db_status['exists'] else "🔴"
-    tooltip_text = db_status.get('path', 'No database') if db_status['exists'] else 'No database found'
-    st.markdown(f'<h2 style="margin-bottom: 0.5rem; cursor: help;" title="{tooltip_text}">ChromaDB Status {status_icon}</h2>', unsafe_allow_html=True)
+        st.image(str(logo_path), use_container_width=True)
+        st.divider()
 
     if db_status['exists']:
-        if 'last_modified' in db_status:
-            st.caption(f"🕐 Last updated: {db_status['last_modified']}")
+        # ChromaDB Status header above Indexes
+        status_icon = "🟢"
+        tooltip_text = db_status.get('path', 'No database')
+        st.markdown(f'<h3 style="margin-bottom: 0.5rem; cursor: help;" title="{tooltip_text}">ChromaDB Status {status_icon}</h3>', unsafe_allow_html=True)
 
-        st.divider()
         st.subheader("Indexes")
         for col in db_status['collections']:
             st.markdown(f"**{col['name']}**: {col['count']} items")
@@ -548,6 +568,10 @@ with st.sidebar:
             st.session_state.system = None
             st.rerun()
     else:
+        # ChromaDB Status (not connected)
+        st.markdown('<h3 style="margin-bottom: 0.5rem;">ChromaDB Status 🔴</h3>', unsafe_allow_html=True)
+        st.caption("No database found")
+
         st.markdown("""
         <p style="font-weight: 600; font-size: 16px; margin-bottom: 5px;">Workflow</p>
         <div style="line-height: 1.4; font-size: 14px;">
