@@ -338,7 +338,7 @@ def check_chroma_exists():
 
 
 def delete_chroma():
-    """Delete ChromaDB directory completely"""
+    """Delete ChromaDB directory completely and clear evaluation history"""
     import chromadb
     import gc
 
@@ -354,6 +354,20 @@ def delete_chroma():
         pass
 
     gc.collect()
+
+    # Delete evaluation history and results
+    if EVAL_HISTORY_FILE.exists():
+        try:
+            EVAL_HISTORY_FILE.unlink()
+        except:
+            pass
+    # Clear session state evaluation history and results
+    if 'evaluation_history' in st.session_state:
+        st.session_state.evaluation_history = []
+    if 'ragas_results' in st.session_state:
+        st.session_state.ragas_results = None
+    if 'judge_results' in st.session_state:
+        st.session_state.judge_results = None
 
     if chroma_dir.exists():
         try:
@@ -1142,7 +1156,7 @@ else:
                     else:
                         st.info("No embedding data available")
                 else:
-                    st.info("Click on a row in the table above to view its details")
+                    st.info("Tick the checkbox of a row in the table above to view its details")
 
             except Exception as e:
                 st.warning(f"Collection '{collection_name}' not found or empty: {e}")
@@ -1961,6 +1975,8 @@ else:
             with col1:
                 if st.button("Clear History", type="secondary"):
                     st.session_state.evaluation_history = []
+                    st.session_state.ragas_results = None
+                    st.session_state.judge_results = None
                     save_evaluation_history([])  # Clear file too
                     st.rerun()
 
