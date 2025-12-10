@@ -1,6 +1,9 @@
 # Insurance Claim Timeline Retrieval System
 ## GenAI Multi-Agent System with Hierarchical Indexing and MCP Integration
 
+![alt text](https://github.com/ShayLevy/Midterm-Coding-Assignment/blob/main/logo.png?raw=true)
+
+
 ## Author
 
 **Shay Levy** \
