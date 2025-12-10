@@ -782,7 +782,8 @@ source venv/bin/activate  # On Windows: venv\Scripts\activate
 pip install -r requirements.txt
 
 # 4. Set up environment variables
-echo "OPENAI_API_KEY=your-api-key-here" > .env
+echo "OPENAI_API_KEY=your-openai-key-here" > .env
+echo "ANTHROPIC_API_KEY=your-anthropic-key-here" >> .env  # Required for LLM-as-a-Judge evaluation
 
 # 5. Run the application
 streamlit run streamlit_app.py
