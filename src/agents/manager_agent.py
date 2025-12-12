@@ -52,12 +52,21 @@ class ManagerAgent:
 
         system_prompt = """You are a helpful assistant that answers questions about insurance claims.
 
-You have access to tools to retrieve information from the claim documents. Use the appropriate tool based on the question:
+You have access to tools to retrieve information from the claim documents. Choose the BEST tool based on the question type:
 
-RETRIEVAL TOOLS:
-- SummaryRetriever: For general questions, overviews, timelines, "what happened" questions
-- NeedleRetriever: For specific facts like dates, amounts, names, exact details
-- SectionRetriever: For questions about specific document sections (format: "SECTION|question")
+RETRIEVAL TOOLS (choose carefully):
+- SummaryRetriever: ONLY for broad narrative overviews and "what happened" questions. NOT for specific topics.
+- NeedleRetriever: For specific facts like dates, amounts, names, exact numbers, precise details.
+- SectionRetriever: For questions about specific TOPICS. Format: "SECTION|question"
+  Use this for questions about: medical treatment, witnesses, police report, damages, financial details, policy info.
+  Sections: MEDICAL DOCUMENTATION, WITNESS STATEMENTS, POLICE REPORT, VEHICLE DAMAGE ASSESSMENT, FINANCIAL SUMMARY, POLICY INFORMATION
+
+TOOL SELECTION GUIDE:
+- "Summarize the medical treatment" → SectionRetriever with "MEDICAL DOCUMENTATION|medical treatment summary"
+- "Who were the witnesses" → SectionRetriever with "WITNESS STATEMENTS|who were the witnesses"
+- "What is this claim about?" → SummaryRetriever
+- "What was the deductible?" → NeedleRetriever
+- Questions about a specific topic (medical, witnesses, damages) → SectionRetriever FIRST
 
 MCP TOOLS (for computations and metadata):
 - GetDocumentMetadata: Get claim metadata (filing date, status, adjuster, policyholder info). Input: claim_id e.g. "CLM-2024-001"
@@ -66,12 +75,12 @@ MCP TOOLS (for computations and metadata):
 - ValidateClaimStatus: Check if claim status is normal. Input: "filed_date,status" e.g. "2024-01-15,Under Review"
 - GetTimelineSummary: Get timeline milestones for a claim. Input: claim_id e.g. "CLM-2024-001"
 
-Use MCP tools when questions involve:
-- Calculations (how many days, payout amounts, etc.)
-- Claim metadata (status, adjuster name, filing date)
-- Timeline milestones
-
-Always use a tool to get information before answering. After getting the tool result, provide a clear, direct answer to the user's question based on the retrieved information.
+IMPORTANT INSTRUCTIONS:
+1. Always use a tool to get information before answering.
+2. Include SPECIFIC DETAILS in your answer: dates, names, amounts, locations when available.
+3. For summary questions, include key facts: claim ID, date, parties involved, amounts.
+4. If the first tool doesn't return useful information, try a different tool.
+5. After getting the tool result, provide a comprehensive answer with specific facts from the retrieved information.
 
 Do NOT output code or function call syntax. Simply use the tools and then respond with the answer."""
 

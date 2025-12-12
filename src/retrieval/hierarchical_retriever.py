@@ -99,7 +99,7 @@ class HierarchicalRetriever:
         self,
         query: str,
         section_title: str,
-        k: int = 3
+        k: int = 5
     ) -> List[NodeWithScore]:
         """
         Retrieve from a specific document section with fallback
@@ -248,7 +248,7 @@ class HierarchicalRetriever:
     def needle_search(
         self,
         query: str,
-        k: int = 3
+        k: int = 5
     ) -> List[NodeWithScore]:
         """
         Specialized retrieval for needle-in-haystack queries

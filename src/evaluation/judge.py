@@ -106,7 +106,8 @@ Evaluate the correctness:""")
         })
 
         try:
-            result = json.loads(response.content)
+            cleaned_response = self._strip_markdown_code_blocks(response.content)
+            result = json.loads(cleaned_response)
             return {
                 "metric": "correctness",
                 "score": result.get("score", 0),
@@ -167,7 +168,8 @@ Evaluate the relevancy:""")
         })
 
         try:
-            result = json.loads(response.content)
+            cleaned_response = self._strip_markdown_code_blocks(response.content)
+            result = json.loads(cleaned_response)
             return {
                 "metric": "relevancy",
                 "score": result.get("score", 0),
@@ -245,7 +247,8 @@ Evaluate the recall:""")
         })
 
         try:
-            result = json.loads(response.content)
+            cleaned_response = self._strip_markdown_code_blocks(response.content)
+            result = json.loads(cleaned_response)
             return {
                 "metric": "recall",
                 "score": result.get("score", 0),
@@ -312,6 +315,16 @@ Evaluate the recall:""")
         results["average_score"] = sum(scores) / len(scores) if scores else 0
 
         return results
+
+    def _strip_markdown_code_blocks(self, text: str) -> str:
+        """Strip markdown code blocks from LLM response"""
+        import re
+        # Remove ```json ... ``` or ``` ... ``` wrapping
+        pattern = r'^```(?:json)?\s*\n?(.*?)\n?```$'
+        match = re.match(pattern, text.strip(), re.DOTALL)
+        if match:
+            return match.group(1).strip()
+        return text.strip()
 
     def _parse_fallback(self, response_text: str, metric_name: str) -> Dict[str, Any]:
         """Fallback parser when JSON parsing fails"""

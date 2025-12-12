@@ -62,17 +62,16 @@ class LangChainIntegration:
         return Tool(
             name="SummaryRetriever",
             func=query_summary,
-            description="""Use this tool for high-level questions about the insurance claim including:
-            - Timeline of events (what happened when)
-            - Overall claim summary
-            - Key parties involved
-            - General overview questions
-            - Questions about the sequence of events
+            description="""Use this tool ONLY for broad narrative overviews of the entire claim:
+            - "What is this claim about?" (overall summary)
+            - "What happened?" (general narrative)
+            - "Summarize the entire claim"
 
-            Examples: 'What is this claim about?', 'What happened?', 'Summarize the timeline',
-            'Who was involved in the accident?'
+            DO NOT use for specific topics like medical treatment, witnesses, or damages.
+            For those, use SectionRetriever with the appropriate section name.
 
-            Input: Your question as a string"""
+            Input: Your question as a string.
+            The answer should include specific facts: claim ID, dates, names, amounts."""
         )
 
     def create_needle_tool(self) -> Tool:
@@ -88,7 +87,7 @@ class LangChainIntegration:
 
             try:
                 # Use needle_search for precision
-                results = self.hier_retriever.needle_search(query, k=3)
+                results = self.hier_retriever.needle_search(query, k=5)
 
                 if not results:
                     return "No specific information found. Try rephrasing your question."
@@ -142,7 +141,7 @@ class LangChainIntegration:
                 results = self.hier_retriever.retrieve_by_section(
                     query=query,
                     section_title=section_name,
-                    k=3
+                    k=5
                 )
 
                 if not results:

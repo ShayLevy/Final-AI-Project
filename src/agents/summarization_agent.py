@@ -56,13 +56,16 @@ class SummarizationAgent:
         # Enhance query with summarization instructions
         enhanced_prompt = f"""Based on the insurance claim documents, {query}
 
-Provide a clear, well-structured summary. Include:
-- Key events in chronological order if relevant
-- Main parties involved
+Provide a clear, well-structured summary that includes SPECIFIC DETAILS:
+- Claim ID and key dates (incident date, filing date)
+- Names of all parties involved (policyholder, at-fault party, witnesses, adjuster)
+- Specific amounts (repair costs, deductibles, total claim amount)
+- Location of incident
+- Key events in chronological order
 - Important outcomes or decisions
-- Timeline context where appropriate
 
-Focus on the big picture and overall narrative."""
+Be specific and factual. Include actual numbers, dates, and names from the documents.
+Do NOT give a generic overview - include the specific details that make this claim unique."""
 
         try:
             response = self.query_engine.query(enhanced_prompt)
