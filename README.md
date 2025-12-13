@@ -4,7 +4,7 @@
 </p>
 
 <p align="center">
-      <img src="https://github.com/ShayLevy/Midterm-Coding-Assignment/blob/main/logo.png">
+      <img width=400 src="https://github.com/ShayLevy/Midterm-Coding-Assignment/blob/main/logo.png">
 </p>
 
 ## Author
