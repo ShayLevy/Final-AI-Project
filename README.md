@@ -140,6 +140,7 @@ flowchart TD
 | Embeddings | OpenAI (text-embedding-3-small) | Text vectorization |
 | LLM (Generation) | OpenAI GPT-4 | Query processing, summarization |
 | LLM (Evaluation) | Anthropic Claude Sonnet | Independent judge model |
+| RAG Evaluation | RAGAS | Faithfulness, relevancy, precision, recall metrics |
 | Data Validation | Pydantic | Schema validation |
 
 ---
