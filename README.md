@@ -1,8 +1,11 @@
-# Insurance Claim Timeline Retrieval System
-## GenAI Multi-Agent System with Hierarchical Indexing and MCP Integration
+<p align="center">
+    <h1 align="center">Insurance Claim Timeline Retrieval System</h1>
+    <h2 align="center">GenAI Multi-Agent System with Hierarchical Indexing and MCP Integration</h2>
+</p>
 
-![alt text](https://github.com/ShayLevy/Midterm-Coding-Assignment/blob/main/logo.png?raw=true)
-
+<p align="center">
+      <img src="https://github.com/ShayLevy/Midterm-Coding-Assignment/blob/main/logo.png">
+</p>
 
 ## Author
 
@@ -31,6 +34,7 @@ December 15, 2024
 
 This project implements a production-grade insurance claim retrieval system using:
 
+- **LlamaIndex** for document indexing, chunking, and retrieval
 - **Multi-agent orchestration** (Manager, Summarization Expert, Needle-in-Haystack Agent)
 - **Hierarchical indexing** with ChromaDB vector store
 - **Dual retrieval strategies**: Summary Index (MapReduce) + Hierarchical Chunk Index
