@@ -201,6 +201,7 @@ st.markdown("""
     .flash-warning {
         animation: flash-warning 1.5s ease-in-out infinite;
     }
+
 </style>
 """, unsafe_allow_html=True)
 
@@ -500,7 +501,7 @@ def index_documents(documents, chunk_sizes, overlap_ratio):
     return system
 
 
-def run_query(query: str):
+def run_query(query: str, top_k: int = 5):
     """Run a query through the system"""
     if not st.session_state.system:
         return {"error": "System not initialized", "success": False}
@@ -508,11 +509,16 @@ def run_query(query: str):
     st.session_state.log_handler.clear()
     setup_logging()
 
+    # Update retrieval k value if system supports it
+    if hasattr(st.session_state.system, 'update_retrieval_k'):
+        st.session_state.system.update_retrieval_k(top_k)
+
     start_time = time.time()
     result = st.session_state.system.query(query)
     elapsed = time.time() - start_time
 
     result['elapsed_time'] = f"{elapsed:.2f}s"
+    result['top_k'] = top_k
     result['logs'] = st.session_state.log_handler.get_logs()
 
     st.session_state.query_history.append({
@@ -871,15 +877,40 @@ else:
     if selected_tab == "🔍 Query":
         st.markdown('<div class="step-header"><h3 style="margin:0;">Query the Insurance Claim</h3></div>', unsafe_allow_html=True)
 
-        # Query input with form for Enter key submission
-        with st.form(key="query_form", clear_on_submit=False):
-            query = st.text_input(
-                "Enter your question:",
-                placeholder="e.g., What was the total repair cost? When did the accident occur?"
+        # Initialize session state for enter key submission
+        if 'query_submitted' not in st.session_state:
+            st.session_state.query_submitted = False
+
+        def on_query_enter():
+            """Callback when Enter is pressed in query input"""
+            st.session_state.query_submitted = True
+
+        # Query input with Enter key detection
+        query = st.text_input(
+            "Enter your question:",
+            placeholder="e.g., What was the total repair cost? When did the accident occur?",
+            key="query_input",
+            on_change=on_query_enter
+        )
+
+        # Ask button and Top K selector on same row
+        col1, col_div, col2, col3, col4 = st.columns([1, 0.1, 0.5, 1.2, 4.2])
+        with col1:
+            query_btn = st.button("Ask", type="primary", use_container_width=True)
+        with col_div:
+            st.markdown('<div style="border-left: 1px solid #ccc; height: 38px; margin: 0 auto;"></div>', unsafe_allow_html=True)
+        with col2:
+            st.markdown('<div style="padding-top: 8px; white-space: nowrap;">Top K:</div>', unsafe_allow_html=True)
+        with col3:
+            top_k = st.number_input(
+                "Top K",
+                min_value=1,
+                max_value=20,
+                value=5,
+                step=1,
+                help="Number of chunks to retrieve (higher = more context, slower)",
+                label_visibility="collapsed"
             )
-            col1, col2, col3 = st.columns([1, 1, 4])
-            with col1:
-                query_btn = st.form_submit_button("Ask", type="primary", use_container_width=True)
 
         # Example queries
         with st.expander("Example Questions", expanded=True):
@@ -907,10 +938,14 @@ else:
             query_btn = True
             st.session_state.pending_query = None
 
-        # Run query
-        if query_btn and query:
+        # Run query (on button click or Enter key press)
+        should_run_query = (query_btn or st.session_state.query_submitted) and query
+        if st.session_state.query_submitted:
+            st.session_state.query_submitted = False  # Reset flag
+
+        if should_run_query:
             with st.spinner("Processing query..."):
-                result = run_query(query)
+                result = run_query(query, top_k=top_k)
 
             # Answer
             st.subheader("Answer")

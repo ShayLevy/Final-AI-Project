@@ -904,6 +904,20 @@ print(result["output"])
 
 ### Running Evaluation
 
+#### CLI Evaluation (LLM-as-a-Judge with Claude)
+
+```bash
+# Run full evaluation suite via command line
+python main.py --evaluate
+
+# Results are saved to evaluation_results/ directory as JSON
+# Example output file: evaluation_results/evaluation_results_20251212_192017.json
+```
+
+The CLI evaluation uses **Anthropic Claude** as the judge model (requires `ANTHROPIC_API_KEY` in `.env`).
+
+#### Streamlit Evaluation (Interactive)
+
 Navigate to the **"RAGAS Evaluation"** tab:
 1. The 10 test queries are **auto-loaded** when you visit the tab
 2. Choose evaluation method: **RAGAS (GPT-4o-mini)** or **LLM-as-a-Judge (Claude)**

@@ -218,6 +218,29 @@ class InsuranceClaimSystem:
             "tool_names": [t.name for t in self.all_tools]
         }
 
+    def update_retrieval_k(self, k: int):
+        """
+        Update the retrieval k value for all tools
+
+        Args:
+            k: Number of chunks to retrieve
+        """
+        logger.info(f"Updating retrieval k to {k}")
+
+        # Update integration layer with new k
+        self.integration = LangChainIntegration(
+            summary_index=self.summary_index,
+            hierarchical_retriever=self.hier_retriever,
+            mcp_tools=self.mcp_tools,
+            retrieval_k=k
+        )
+        self.all_tools = self.integration.get_all_tools()
+
+        # Recreate manager agent with new tools
+        self.manager_agent = ManagerAgent(tools=self.all_tools)
+
+        logger.info(f"Retrieval k updated to {k}, tools recreated")
+
 
 class EvaluationRunner:
     """

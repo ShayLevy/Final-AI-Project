@@ -21,7 +21,8 @@ class LangChainIntegration:
         self,
         summary_index,
         hierarchical_retriever,
-        mcp_tools: List[Tool] = None
+        mcp_tools: List[Tool] = None,
+        retrieval_k: int = 5
     ):
         """
         Initialize integration layer
@@ -30,12 +31,14 @@ class LangChainIntegration:
             summary_index: LlamaIndex DocumentSummaryIndex
             hierarchical_retriever: HierarchicalRetriever instance
             mcp_tools: List of MCP tools (optional)
+            retrieval_k: Number of chunks to retrieve (default: 5)
         """
         self.summary_index = summary_index
         self.hier_retriever = hierarchical_retriever
         self.mcp_tools = mcp_tools or []
+        self.retrieval_k = retrieval_k
 
-        logger.info("LangChain integration layer initialized")
+        logger.info(f"LangChain integration layer initialized (k={retrieval_k})")
 
     def create_summary_tool(self) -> Tool:
         """
@@ -83,11 +86,11 @@ class LangChainIntegration:
         """
         def query_needle(query: str) -> str:
             """Query hierarchical index for precise details"""
-            logger.info(f"Needle tool called with query: '{query[:50]}...'")
+            logger.info(f"Needle tool called with query: '{query[:50]}...' (k={self.retrieval_k})")
 
             try:
                 # Use needle_search for precision
-                results = self.hier_retriever.needle_search(query, k=5)
+                results = self.hier_retriever.needle_search(query, k=self.retrieval_k)
 
                 if not results:
                     return "No specific information found. Try rephrasing your question."
@@ -126,7 +129,7 @@ class LangChainIntegration:
         """
         def query_section(section_and_query: str) -> str:
             """Query specific document section"""
-            logger.info(f"Section tool called with: '{section_and_query[:50]}...'")
+            logger.info(f"Section tool called with: '{section_and_query[:50]}...' (k={self.retrieval_k})")
 
             try:
                 # Parse input: "section_name|query"
@@ -141,7 +144,7 @@ class LangChainIntegration:
                 results = self.hier_retriever.retrieve_by_section(
                     query=query,
                     section_title=section_name,
-                    k=5
+                    k=self.retrieval_k
                 )
 
                 if not results:
