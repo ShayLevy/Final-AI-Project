@@ -40,6 +40,7 @@ This project implements a production-grade insurance claim retrieval system usin
 - **Dual retrieval strategies**: Summary Index (MapReduce) + Hierarchical Chunk Index
 - **MCP tools** for extended capabilities (metadata access, date calculations, cost estimations)
 - **LLM-as-a-judge** evaluation framework
+- **RAGAS** for RAG pipeline evaluation metrics (Faithfulness, Answer Relevancy, Context Precision/Recall)
 
 ### Key Capabilities
 
