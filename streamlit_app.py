@@ -894,7 +894,7 @@ else:
         )
 
         # Ask button and Top K selector on same row
-        col1, col_div, col2, col3, col4 = st.columns([1, 0.1, 0.5, 1.2, 4.2])
+        col1, col_div, col2, col3, col_div2, col4, col5, col6 = st.columns([1, 0.1, 0.5, 1.2, 0.1, 0.8, 1.2, 2.9])
         with col1:
             query_btn = st.button("Ask", type="primary", use_container_width=True)
         with col_div:
@@ -909,6 +909,21 @@ else:
                 value=5,
                 step=1,
                 help="Number of chunks to retrieve (higher = more context, slower)",
+                label_visibility="collapsed"
+            )
+        with col_div2:
+            st.markdown('<div style="border-left: 1px solid #ccc; height: 38px; margin: 0 auto;"></div>', unsafe_allow_html=True)
+        with col4:
+            st.markdown('<div style="padding-top: 8px; white-space: nowrap;">Temperature:</div>', unsafe_allow_html=True)
+        with col5:
+            temperature = st.number_input(
+                "Temperature",
+                min_value=-0.01,
+                max_value=2.01,
+                value=0.0,
+                step=0.1,
+                format="%.2g",
+                help="LLM temperature (0 = deterministic, higher = more creative)",
                 label_visibility="collapsed"
             )
 
