@@ -42,6 +42,10 @@ This project implements a production-grade insurance claim retrieval system usin
 - **LLM-as-a-judge** evaluation framework
 - **RAGAS** for RAG pipeline evaluation metrics (Faithfulness, Answer Relevancy, Context Precision/Recall)
 
+<p align="center">
+      <img src="https://github.com/ShayLevy/Midterm-Coding-Assignment/blob/main/app.png" style="border: 3px solid black;">
+</p>
+
 ### Key Capabilities
 
 ✅ Answer high-level summary questions using timeline-oriented index \
