@@ -846,9 +846,9 @@ else:
             )
 
     # Tab options and URL persistence
-    tab_options = ["🔍 Query", "📚 Browse Vector DB", "📊 RAGAS Evaluation"]
-    tab_url_map = {"query": 0, "browse": 1, "eval": 2}
-    url_tab_map = {0: "query", 1: "browse", 2: "eval"}
+    tab_options = ["🔍 Query", "📚 Browse Vector DB", "📊 RAGAS Evaluation", "🧪 Code-Based Graders"]
+    tab_url_map = {"query": 0, "browse": 1, "eval": 2, "graders": 3}
+    url_tab_map = {0: "query", 1: "browse", 2: "eval", 3: "graders"}
 
     # Get tab from URL query params (persists across refresh)
     query_params = st.query_params
@@ -2060,6 +2060,301 @@ else:
                     st.session_state.judge_results = None
                     save_evaluation_history([])  # Clear file too
                     st.rerun()
+
+    # ==========================================================================
+    # TAB 4: Code-Based Graders
+    # ==========================================================================
+    elif selected_tab == "🧪 Code-Based Graders":
+        st.markdown('<div class="step-header"><h3 style="margin:0;">Code-Based Evaluation Graders</h3></div>', unsafe_allow_html=True)
+
+        st.info("""
+        **Code-Based Graders** provide deterministic evaluation using exact match and regex patterns:
+        - **Fast, cheap, objective, reproducible, easy to debug**
+        - **Binary pass/fail scoring** (0 or 1)
+        - **No LLM calls required** for grading
+
+        Based on Anthropic's "Demystifying Evals for AI Agents" recommendations.
+        """)
+
+        # Import code-based graders
+        from src.evaluation.code_graders import CodeBasedGraders, GROUND_TRUTH, REGEX_PATTERNS
+        from src.evaluation.code_grader_tests import CodeGraderTestSuite
+
+        # Initialize session state for code graders
+        if 'code_grader_results' not in st.session_state:
+            st.session_state.code_grader_results = None
+        if 'code_grader_mode' not in st.session_state:
+            st.session_state.code_grader_mode = "RAG Response Grading"
+
+        # Test mode selector
+        test_mode = st.radio(
+            "Select Test Mode:",
+            ["RAG Response Grading", "Standalone Regex Validation"],
+            horizontal=True,
+            help="RAG mode queries the system then grades responses. Standalone mode tests regex patterns directly."
+        )
+        st.session_state.code_grader_mode = test_mode
+
+        st.divider()
+
+        if test_mode == "RAG Response Grading":
+            st.subheader("RAG Response Grading")
+            st.markdown("Query the RAG system, then apply code-based graders to evaluate the response.")
+
+            # Get RAG test cases
+            rag_test_cases = CodeGraderTestSuite.get_rag_test_cases()
+
+            # Display test cases with selection
+            st.markdown(f"**Available Test Cases ({len(rag_test_cases)})**")
+
+            # Build selection table
+            import pandas as pd
+            table_data = []
+            for tc in rag_test_cases:
+                table_data.append({
+                    "Select": True,
+                    "ID": tc["id"],
+                    "Query": tc["query"][:60] + "..." if len(tc["query"]) > 60 else tc["query"],
+                    "Expected": tc["expected_value"],
+                    "Category": tc.get("category", "other")
+                })
+
+            df = pd.DataFrame(table_data)
+
+            # Editable dataframe for selection
+            edited_df = st.data_editor(
+                df,
+                column_config={
+                    "Select": st.column_config.CheckboxColumn("Select", default=True),
+                    "ID": st.column_config.TextColumn("ID", width="small"),
+                    "Query": st.column_config.TextColumn("Query", width="large"),
+                    "Expected": st.column_config.TextColumn("Expected", width="medium"),
+                    "Category": st.column_config.TextColumn("Category", width="small")
+                },
+                disabled=["ID", "Query", "Expected", "Category"],
+                hide_index=True,
+                use_container_width=True,
+                key="rag_grader_table"
+            )
+
+            # Run evaluation button
+            selected_count = edited_df["Select"].sum()
+            st.markdown(f"**Selected: {selected_count} test cases**")
+
+            if st.button("🚀 Run RAG Grading", type="primary", disabled=selected_count == 0):
+                if 'system' not in st.session_state or st.session_state.system is None:
+                    st.error("Please upload and index a document first (use the Query tab)")
+                else:
+                    results = []
+                    progress_bar = st.progress(0)
+                    status_text = st.empty()
+
+                    selected_indices = edited_df[edited_df["Select"]].index.tolist()
+
+                    for i, idx in enumerate(selected_indices):
+                        test_case = rag_test_cases[idx]
+                        status_text.text(f"Running test {i+1}/{len(selected_indices)}: {test_case['id']}")
+
+                        # Query RAG system
+                        try:
+                            rag_result = st.session_state.system.query(test_case["query"])
+                            answer = rag_result.get("output", "")
+
+                            # Grade the response
+                            grade_result = CodeBasedGraders.run_rag_test(answer, test_case)
+                            grade_result["rag_answer"] = answer[:200] + "..." if len(answer) > 200 else answer
+                            results.append(grade_result)
+
+                        except Exception as e:
+                            results.append({
+                                "test_id": test_case["id"],
+                                "passed": False,
+                                "score": 0,
+                                "details": f"Error: {str(e)}",
+                                "rag_answer": ""
+                            })
+
+                        progress_bar.progress((i + 1) / len(selected_indices))
+
+                    status_text.text("Evaluation complete!")
+                    st.session_state.code_grader_results = {
+                        "mode": "RAG Response Grading",
+                        "results": results,
+                        "summary": CodeBasedGraders.calculate_summary(results),
+                        "timestamp": pd.Timestamp.now().strftime("%Y-%m-%d %H:%M:%S")
+                    }
+                    st.rerun()
+
+            # Display results
+            if st.session_state.code_grader_results and st.session_state.code_grader_results.get("mode") == "RAG Response Grading":
+                st.divider()
+                st.subheader("Results")
+
+                results_data = st.session_state.code_grader_results
+                summary = results_data["summary"]
+
+                # Summary metrics
+                col1, col2, col3, col4 = st.columns(4)
+                with col1:
+                    st.metric("Total Tests", summary["total_tests"])
+                with col2:
+                    pass_color = "green" if summary["pass_rate"] >= 80 else "orange" if summary["pass_rate"] >= 60 else "red"
+                    st.metric("Passed", summary["passed"], delta=None)
+                with col3:
+                    st.metric("Failed", summary["failed"])
+                with col4:
+                    st.metric("Pass Rate", f"{summary['pass_rate']:.1f}%")
+
+                # Detailed results
+                st.markdown("**Detailed Results**")
+                results_table = []
+                for r in results_data["results"]:
+                    results_table.append({
+                        "Test ID": r.get("test_id", ""),
+                        "Status": "✅ PASS" if r.get("passed") else "❌ FAIL",
+                        "Expected": r.get("expected", ""),
+                        "Found": r.get("found", "N/A"),
+                        "RAG Answer": r.get("rag_answer", "")[:100] + "..."
+                    })
+
+                st.dataframe(pd.DataFrame(results_table), use_container_width=True, hide_index=True)
+
+                # Export button
+                csv_data = pd.DataFrame(results_table).to_csv(index=False)
+                st.download_button(
+                    "📥 Export Results (CSV)",
+                    csv_data,
+                    f"code_grader_rag_results_{results_data['timestamp'].replace(' ', '_').replace(':', '-')}.csv",
+                    "text/csv"
+                )
+
+        else:  # Standalone Regex Validation
+            st.subheader("Standalone Regex Validation")
+            st.markdown("Test regex patterns against sample text to verify pattern correctness.")
+
+            # Get regex test cases
+            regex_test_cases = CodeGraderTestSuite.get_regex_test_cases()
+
+            # Display available patterns
+            st.markdown(f"**Available Regex Patterns ({len(regex_test_cases)})**")
+
+            import pandas as pd
+            pattern_data = []
+            for tc in regex_test_cases:
+                pattern_data.append({
+                    "Select": True,
+                    "ID": tc["id"],
+                    "Pattern Name": tc["pattern_name"],
+                    "Regex": tc["regex_pattern"][:40] + "..." if len(tc["regex_pattern"]) > 40 else tc["regex_pattern"],
+                    "Category": tc.get("category", "other")
+                })
+
+            df_patterns = pd.DataFrame(pattern_data)
+
+            edited_patterns = st.data_editor(
+                df_patterns,
+                column_config={
+                    "Select": st.column_config.CheckboxColumn("Select", default=True),
+                    "ID": st.column_config.TextColumn("ID", width="small"),
+                    "Pattern Name": st.column_config.TextColumn("Pattern", width="medium"),
+                    "Regex": st.column_config.TextColumn("Regex", width="large"),
+                    "Category": st.column_config.TextColumn("Category", width="small")
+                },
+                disabled=["ID", "Pattern Name", "Regex", "Category"],
+                hide_index=True,
+                use_container_width=True,
+                key="regex_grader_table"
+            )
+
+            selected_pattern_count = edited_patterns["Select"].sum()
+            st.markdown(f"**Selected: {selected_pattern_count} patterns**")
+
+            if st.button("🚀 Run Regex Validation", type="primary", disabled=selected_pattern_count == 0):
+                results = []
+                selected_indices = edited_patterns[edited_patterns["Select"]].index.tolist()
+
+                for idx in selected_indices:
+                    test_case = regex_test_cases[idx]
+                    result = CodeBasedGraders.run_standalone_regex_test(test_case["pattern_name"])
+                    result["test_id"] = test_case["id"]
+                    result["description"] = test_case["description"]
+                    results.append(result)
+
+                st.session_state.code_grader_results = {
+                    "mode": "Standalone Regex Validation",
+                    "results": results,
+                    "summary": CodeBasedGraders.calculate_summary(results),
+                    "timestamp": pd.Timestamp.now().strftime("%Y-%m-%d %H:%M:%S")
+                }
+                st.rerun()
+
+            # Display results
+            if st.session_state.code_grader_results and st.session_state.code_grader_results.get("mode") == "Standalone Regex Validation":
+                st.divider()
+                st.subheader("Results")
+
+                results_data = st.session_state.code_grader_results
+                summary = results_data["summary"]
+
+                # Summary metrics
+                col1, col2, col3, col4 = st.columns(4)
+                with col1:
+                    st.metric("Total Tests", summary["total_tests"])
+                with col2:
+                    st.metric("Passed", summary["passed"])
+                with col3:
+                    st.metric("Failed", summary["failed"])
+                with col4:
+                    st.metric("Pass Rate", f"{summary['pass_rate']:.1f}%")
+
+                # Detailed results
+                st.markdown("**Detailed Results**")
+                results_table = []
+                for r in results_data["results"]:
+                    results_table.append({
+                        "Test ID": r.get("test_id", ""),
+                        "Pattern": r.get("pattern_name", ""),
+                        "Status": "✅ PASS" if r.get("passed") else "❌ FAIL",
+                        "Matches Found": str(r.get("matches", []))[:50],
+                        "Sample Text": r.get("sample_text", "")[:60] + "..."
+                    })
+
+                st.dataframe(pd.DataFrame(results_table), use_container_width=True, hide_index=True)
+
+                # Show full pattern details in expander
+                with st.expander("View Full Pattern Details"):
+                    for r in results_data["results"]:
+                        status_icon = "✅" if r.get("passed") else "❌"
+                        st.markdown(f"**{status_icon} {r.get('pattern_name', '')}**")
+                        st.code(r.get("pattern", ""), language="regex")
+                        st.markdown(f"Matches: `{r.get('matches', [])}`")
+                        st.markdown(f"Sample: {r.get('sample_text', '')}")
+                        st.divider()
+
+                # Export button
+                csv_data = pd.DataFrame(results_table).to_csv(index=False)
+                st.download_button(
+                    "📥 Export Results (CSV)",
+                    csv_data,
+                    f"code_grader_regex_results_{results_data['timestamp'].replace(' ', '_').replace(':', '-')}.csv",
+                    "text/csv"
+                )
+
+        # Ground Truth Reference
+        with st.expander("📋 View Ground Truth Reference"):
+            st.markdown("**Expected values from insurance_claim_CLM2024001.pdf:**")
+            gt_table = []
+            for key, value in GROUND_TRUTH.items():
+                gt_table.append({"Field": key, "Expected Value": value})
+            st.dataframe(pd.DataFrame(gt_table), use_container_width=True, hide_index=True)
+
+        # Regex Patterns Reference
+        with st.expander("🔍 View Regex Patterns Reference"):
+            st.markdown("**Available regex patterns for extraction:**")
+            pattern_table = []
+            for name, pattern in REGEX_PATTERNS.items():
+                pattern_table.append({"Pattern Name": name, "Regex": pattern})
+            st.dataframe(pd.DataFrame(pattern_table), use_container_width=True, hide_index=True)
 
 # Footer
 st.divider()
