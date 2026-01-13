@@ -244,16 +244,244 @@ class CodeGraderTestSuite:
         ]
 
     @staticmethod
+    def get_numerical_validation_test_cases() -> List[Dict[str, Any]]:
+        """
+        Get test cases for numerical validation grader.
+        These tests validate financial amounts with configurable tolerance.
+
+        Returns:
+            List of test case dictionaries
+        """
+        return [
+            {
+                "id": "CBG_NUM_01",
+                "query": "What was the total claim amount?",
+                "grader_type": "numerical_validation",
+                "expected_value": 23370.80,
+                "tolerance_type": "absolute",
+                "tolerance_value": 0.01,
+                "value_type": "currency",
+                "description": "Validate total claim amount with $0.01 tolerance",
+                "category": "financial"
+            },
+            {
+                "id": "CBG_NUM_02",
+                "query": "What was the vehicle repair cost?",
+                "grader_type": "numerical_validation",
+                "expected_value": 17111.83,
+                "tolerance_type": "percentage",
+                "tolerance_value": 1.0,
+                "value_type": "currency",
+                "description": "Validate repair cost with 1% tolerance",
+                "category": "financial"
+            },
+            {
+                "id": "CBG_NUM_03",
+                "query": "What was the at-fault driver's BAC level?",
+                "grader_type": "numerical_validation",
+                "expected_value": 0.14,
+                "tolerance_type": "absolute",
+                "tolerance_value": 0.001,
+                "value_type": "percentage",
+                "description": "Validate BAC percentage",
+                "category": "medical"
+            },
+            {
+                "id": "CBG_NUM_04",
+                "query": "What was the collision deductible amount?",
+                "grader_type": "numerical_validation",
+                "expected_value": 750.0,
+                "tolerance_type": "absolute",
+                "tolerance_value": 0.01,
+                "value_type": "currency",
+                "description": "Validate deductible amount",
+                "category": "financial"
+            },
+            {
+                "id": "CBG_NUM_05",
+                "query": "How many physical therapy sessions were completed?",
+                "grader_type": "numerical_validation",
+                "expected_value": 8,
+                "tolerance_type": "absolute",
+                "tolerance_value": 0,
+                "value_type": "integer",
+                "description": "Validate PT session count (exact)",
+                "category": "medical"
+            },
+        ]
+
+    @staticmethod
+    def get_consistency_check_test_cases() -> List[Dict[str, Any]]:
+        """
+        Get test cases for consistency checking grader.
+        These tests verify internal consistency of RAG responses.
+
+        Returns:
+            List of test case dictionaries
+        """
+        return [
+            {
+                "id": "CBG_CONS_01",
+                "query": "Provide a timeline of the claim from incident to vehicle return.",
+                "grader_type": "consistency_check",
+                "check_type": "chronological",
+                "check_config": {},
+                "description": "Verify dates are in chronological order",
+                "category": "dates"
+            },
+            {
+                "id": "CBG_CONS_02",
+                "query": "What were the total costs and their breakdown?",
+                "grader_type": "consistency_check",
+                "check_type": "sum_constraint",
+                "check_config": {
+                    "operator": "<="
+                },
+                "description": "Verify component costs do not exceed total",
+                "category": "financial"
+            },
+            {
+                "id": "CBG_CONS_03",
+                "query": "Tell me about Sarah Mitchell and her insurance claim.",
+                "grader_type": "consistency_check",
+                "check_type": "name_consistency",
+                "check_config": {
+                    "expected_name": "Sarah Mitchell"
+                },
+                "description": "Verify policyholder name is consistent throughout",
+                "category": "people"
+            },
+        ]
+
+    @staticmethod
+    def get_key_fact_coverage_test_cases() -> List[Dict[str, Any]]:
+        """
+        Get test cases for key fact coverage grader.
+        These tests check if responses contain all required facts.
+
+        Returns:
+            List of test case dictionaries
+        """
+        return [
+            {
+                "id": "CBG_FACT_01",
+                "query": "What is this insurance claim about? Provide a summary.",
+                "grader_type": "key_fact_coverage",
+                "fact_group": "incident_summary",
+                "description": "Check incident summary completeness",
+                "category": "summary"
+            },
+            {
+                "id": "CBG_FACT_02",
+                "query": "What were the total costs involved in this claim?",
+                "grader_type": "key_fact_coverage",
+                "fact_group": "financial_summary",
+                "description": "Check financial summary completeness",
+                "category": "financial"
+            },
+            {
+                "id": "CBG_FACT_03",
+                "query": "What was the outcome of the liability determination?",
+                "grader_type": "key_fact_coverage",
+                "fact_group": "liability_determination",
+                "description": "Check liability information completeness",
+                "category": "liability"
+            },
+            {
+                "id": "CBG_FACT_04",
+                "query": "Summarize the medical treatment Sarah Mitchell received.",
+                "grader_type": "key_fact_coverage",
+                "fact_group": "medical_treatment",
+                "description": "Check medical treatment completeness",
+                "category": "medical"
+            },
+            {
+                "id": "CBG_FACT_05",
+                "query": "Who were the witnesses and what did they observe?",
+                "grader_type": "key_fact_coverage",
+                "fact_group": "witness_information",
+                "description": "Check witness information completeness",
+                "category": "witnesses"
+            },
+        ]
+
+    @staticmethod
+    def get_fuzzy_match_test_cases() -> List[Dict[str, Any]]:
+        """
+        Get test cases for fuzzy string matching grader.
+        These tests handle name and string variations.
+
+        Returns:
+            List of test case dictionaries
+        """
+        return [
+            {
+                "id": "CBG_FUZZY_01",
+                "query": "Who is the policyholder?",
+                "grader_type": "fuzzy_match",
+                "expected_value": "Sarah Mitchell",
+                "similarity_threshold": 0.80,
+                "match_type": "name",
+                "description": "Fuzzy match policyholder name",
+                "category": "people"
+            },
+            {
+                "id": "CBG_FUZZY_02",
+                "query": "Who was the at-fault driver?",
+                "grader_type": "fuzzy_match",
+                "expected_value": "Robert Harrison",
+                "similarity_threshold": 0.80,
+                "match_type": "name",
+                "description": "Fuzzy match at-fault driver name",
+                "category": "people"
+            },
+            {
+                "id": "CBG_FUZZY_03",
+                "query": "Who is the claims adjuster assigned to this case?",
+                "grader_type": "fuzzy_match",
+                "expected_value": "Kevin Park",
+                "similarity_threshold": 0.75,
+                "match_type": "name",
+                "description": "Fuzzy match claims adjuster name",
+                "category": "people"
+            },
+            {
+                "id": "CBG_FUZZY_04",
+                "query": "What hospital was Sarah Mitchell treated at?",
+                "grader_type": "fuzzy_match",
+                "expected_value": "Cedars-Sinai",
+                "similarity_threshold": 0.85,
+                "match_type": "name",
+                "description": "Fuzzy match hospital name",
+                "category": "medical"
+            },
+            {
+                "id": "CBG_FUZZY_05",
+                "query": "Who was the treating orthopedist?",
+                "grader_type": "fuzzy_match",
+                "expected_value": "Dr. Rachel Kim",
+                "similarity_threshold": 0.70,
+                "match_type": "name",
+                "description": "Fuzzy match doctor name",
+                "category": "medical"
+            },
+        ]
+
+    @staticmethod
     def get_all_test_cases() -> Dict[str, List[Dict[str, Any]]]:
         """
         Get all test cases organized by type.
 
         Returns:
-            Dictionary with 'rag' and 'regex' test case lists
+            Dictionary with all test case types
         """
         return {
             "rag": CodeGraderTestSuite.get_rag_test_cases(),
-            "regex": CodeGraderTestSuite.get_regex_test_cases()
+            "regex": CodeGraderTestSuite.get_regex_test_cases(),
+            "numerical": CodeGraderTestSuite.get_numerical_validation_test_cases(),
+            "consistency": CodeGraderTestSuite.get_consistency_check_test_cases(),
+            "coverage": CodeGraderTestSuite.get_key_fact_coverage_test_cases(),
+            "fuzzy": CodeGraderTestSuite.get_fuzzy_match_test_cases(),
         }
 
     @staticmethod
@@ -318,8 +546,20 @@ class CodeGraderTestSuite:
                 if test_type == "rag":
                     print(f"      Query: {case['query'][:50]}...")
                     print(f"      Expected: {case['expected_value']}")
-                else:
+                elif test_type == "regex":
                     print(f"      Pattern: {case['regex_pattern'][:40]}...")
+                elif test_type == "numerical":
+                    print(f"      Query: {case['query'][:50]}...")
+                    print(f"      Expected: {case['expected_value']} (tolerance: {case.get('tolerance_type', 'absolute')})")
+                elif test_type == "consistency":
+                    print(f"      Query: {case['query'][:50]}...")
+                    print(f"      Check: {case['check_type']}")
+                elif test_type == "coverage":
+                    print(f"      Query: {case['query'][:50]}...")
+                    print(f"      Fact group: {case['fact_group']}")
+                elif test_type == "fuzzy":
+                    print(f"      Query: {case['query'][:50]}...")
+                    print(f"      Expected: {case['expected_value']} (threshold: {case.get('similarity_threshold', 0.8)})")
 
         # Category summary
         print("\n" + "-" * 50)

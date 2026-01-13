@@ -41,6 +41,7 @@ This project implements a production-grade insurance claim retrieval system usin
 - **MCP tools** for extended capabilities (metadata access, date calculations, cost estimations)
 - **LLM-as-a-judge** evaluation framework
 - **RAGAS** for RAG pipeline evaluation metrics (Faithfulness, Answer Relevancy, Context Precision/Recall)
+- **Code-based evaluation graders** (Exact Match, Regex, Numerical Validation, Consistency Checking, Key Fact Coverage, Fuzzy Matching)
 
 <p align="center">
       <img src="https://github.com/ShayLevy/Midterm-Coding-Assignment/blob/main/app.png" style="border: 3px solid black;">
@@ -53,6 +54,7 @@ This project implements a production-grade insurance claim retrieval system usin
 ✅ Perform computations via MCP tools \
 ✅ Route queries intelligently to appropriate retrieval strategies \
 ✅ Evaluate system performance objectively using separate judge model \
+✅ Deterministic code-based graders for fast, reproducible evaluation \
 
 
 ### Educational Value
@@ -801,6 +803,52 @@ result = CodeBasedGraders.regex_grade(
 # Returns: {"passed": True, "score": 1, "matches": ["$23,370.80"]}
 ```
 
+**3. Numerical Validation Grader** - Validates amounts with configurable tolerance:
+```python
+# Supports absolute tolerance (±$0.01) or percentage tolerance (±1%)
+result = CodeBasedGraders.numerical_validation_grade(
+    answer="The total claim amount was $23,370.80",
+    expected_value=23370.80,
+    tolerance_type="absolute",  # or "percentage"
+    tolerance_value=0.01,
+    value_type="currency"  # "currency", "percentage", or "integer"
+)
+# Returns: {"passed": True, "score": 1, "found_value": 23370.80, "difference": 0.0}
+```
+
+**4. Consistency Checking Grader** - Verifies internal consistency of facts:
+```python
+# Check types: "chronological", "sum_constraint", "name_consistency"
+result = CodeBasedGraders.consistency_check_grade(
+    answer="The incident occurred on January 12, 2024. The claim was filed on January 15, 2024.",
+    check_type="chronological"
+)
+# Returns: {"passed": True, "score": 1, "violations": [], "dates_found": [...]}
+```
+
+**5. Key Fact Coverage Grader** - Checks completeness of required facts:
+```python
+# Uses predefined fact groups: incident_summary, financial_summary,
+# liability_determination, medical_treatment, witness_information
+result = CodeBasedGraders.key_fact_coverage_grade(
+    answer="The incident on January 12, 2024 at 7:42 AM involved Sarah Mitchell...",
+    fact_group="incident_summary"
+)
+# Returns: {"passed": True, "score": 1, "facts_found": [...], "facts_missing": [], "coverage_ratio": 1.0}
+```
+
+**6. Fuzzy String Matching Grader** - Handles name variations with similarity threshold:
+```python
+# Uses SequenceMatcher for flexible matching
+result = CodeBasedGraders.fuzzy_match_grade(
+    answer="The policyholder is S. Mitchell",
+    expected_value="Sarah Mitchell",
+    similarity_threshold=0.80,
+    match_type="name"
+)
+# Returns: {"passed": True, "score": 1, "best_match": "S. Mitchell", "similarity_ratio": 0.85}
+```
+
 #### Ground Truth Registry
 
 Values extracted from `data/insurance_claim_CLM2024001.pdf`:
@@ -833,7 +881,16 @@ Values extracted from `data/insurance_claim_CLM2024001.pdf`:
 | percentage | `\d+\.?\d*%` | 0.14% |
 | policy_number | `POL-\d{4}-[A-Z]{3}-\d{5}` | POL-2024-VEH-45782 |
 
-#### Two Test Modes
+#### Six Grader Types (36 Test Cases)
+
+| Grader Type | Test Count | Description |
+|-------------|------------|-------------|
+| **Exact Match & Regex** | 10 | Query RAG system, grade response with exact match |
+| **Standalone Regex** | 8 | Validate regex patterns against sample text |
+| **Numerical Validation** | 5 | Validate amounts with tolerance (±$0.01 or ±1%) |
+| **Consistency Checking** | 3 | Verify chronological order, sum constraints, name consistency |
+| **Key Fact Coverage** | 5 | Check completeness of required facts per topic |
+| **Fuzzy String Matching** | 5 | Handle name variations with similarity threshold |
 
 **Mode 1: RAG Response Grading** (10 tests)
 - Query the RAG system, then grade the response using exact match
@@ -843,13 +900,33 @@ Values extracted from `data/insurance_claim_CLM2024001.pdf`:
 - Test regex patterns against sample text (no RAG required)
 - Validates that patterns correctly extract expected formats
 
+**Mode 3: Numerical Validation** (5 tests)
+- Validates financial amounts with configurable tolerance
+- Tests: total_claim_amount (±$0.01), repair_cost (±1%), BAC level, deductible, PT sessions
+
+**Mode 4: Consistency Checking** (3 tests)
+- Verifies internal consistency of facts in responses
+- Tests: chronological order of dates, sum constraints, name consistency
+
+**Mode 5: Key Fact Coverage** (5 tests)
+- Checks if responses contain all required facts for a topic
+- Tests: incident_summary, financial_summary, liability_determination, medical_treatment, witness_information
+
+**Mode 6: Fuzzy String Matching** (5 tests)
+- Handles name variations using similarity threshold
+- Tests: policyholder, at_fault_driver, claims_adjuster, accident_location, hospital
+
 #### Using Code-Based Graders in Streamlit
 
 Navigate to the **"🧪 Code-Based Graders"** tab:
-1. Select test mode: **RAG Response Grading** or **Standalone Regex Validation**
+1. Select grader type from 6 options: Exact Match & Regex, Numerical Validation, Consistency Checking, Key Fact Coverage, Fuzzy String Matching, or Standalone Regex Validation
 2. Select/deselect individual test cases using the checkbox column
-3. Click **"Run RAG Grading"** or **"Run Regex Validation"**
-4. View results with pass/fail status and detailed breakdown
+3. Click the run button for your selected grader type
+4. View results with pass/fail status and grader-specific details:
+   - **Numerical**: Expected value, found value, difference, tolerance
+   - **Consistency**: Check type, violations found, dates/values extracted
+   - **Coverage**: Fact group, coverage ratio, facts found/missing
+   - **Fuzzy**: Expected value, best match, similarity percentage
 5. Export results to CSV
 
 #### Example Results
@@ -871,9 +948,9 @@ Summary: 10/10 passed (100%)
 
 | File | Purpose |
 |------|---------|
-| `src/evaluation/code_graders.py` | Grader classes (ExactMatch, Regex) |
-| `src/evaluation/code_grader_tests.py` | Test case definitions (18 total) |
-| `streamlit_app.py` | UI tab implementation |
+| `src/evaluation/code_graders.py` | All 6 grader methods + ground truth data |
+| `src/evaluation/code_grader_tests.py` | Test case definitions (36 total) |
+| `streamlit_app.py` | UI tab with grader type selector |
 
 ---
 
