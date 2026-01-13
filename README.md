@@ -763,6 +763,120 @@ Output: {score, reasoning, matched_facts, missed_facts}
 3. Recall % = (retrieved_expected / total_expected) × 100
 4. Convert to 1-5 scale
 
+### Code-Based Evaluation Graders
+
+In addition to LLM-based evaluation, we implement **deterministic code-based graders** following Anthropic's ["Demystifying Evals for AI Agents"](https://www.anthropic.com/engineering/demystifying-evals-for-ai-agents) recommendations.
+
+#### Why Code-Based Graders?
+
+| Characteristic | LLM-as-a-Judge | Code-Based Graders |
+|----------------|----------------|-------------------|
+| **Speed** | Slow (API calls) | Fast (local execution) |
+| **Cost** | $0.02+ per eval | Free |
+| **Objectivity** | Subjective | 100% deterministic |
+| **Reproducibility** | May vary | Always identical |
+| **Debugging** | Black box | Transparent logic |
+
+#### Grader Types Implemented
+
+**1. Exact Match Grader** - Verifies specific values appear in RAG responses:
+```python
+# Binary pass/fail (score: 0 or 1)
+result = CodeBasedGraders.exact_match_grade(
+    answer="The claim ID is CLM-2024-001",
+    expected="CLM-2024-001",
+    case_sensitive=False
+)
+# Returns: {"passed": True, "score": 1, "found": "CLM-2024-001"}
+```
+
+**2. Regex Pattern Grader** - Extracts and validates patterns:
+```python
+# Validates currency, dates, claim IDs, VINs, phone numbers, etc.
+result = CodeBasedGraders.regex_grade(
+    answer="The total was $23,370.80",
+    pattern=r"\$[\d,]+\.\d{2}",
+    expected_value="$23,370.80"
+)
+# Returns: {"passed": True, "score": 1, "matches": ["$23,370.80"]}
+```
+
+#### Ground Truth Registry
+
+Values extracted from `data/insurance_claim_CLM2024001.pdf`:
+
+| Category | Key | Expected Value |
+|----------|-----|----------------|
+| Identifiers | claim_id | CLM-2024-001 |
+| Identifiers | policy_number | POL-2024-VEH-45782 |
+| Identifiers | vin | 1HGCV1F39LA012345 |
+| People | policyholder | Sarah Mitchell |
+| People | at_fault_driver | Robert Harrison |
+| People | claims_adjuster | Kevin Park |
+| Financial | collision_deductible | $750 |
+| Financial | total_claim | $23,370.80 |
+| Financial | repair_cost | $17,111.83 |
+| Dates | incident_date | January 12, 2024 |
+| Medical | bac_level | 0.14% |
+| Medical | pt_sessions | 8 |
+
+#### Regex Patterns
+
+| Pattern Name | Regex | Example Match |
+|-------------|-------|---------------|
+| claim_id | `CLM-\d{4}-\d{3}` | CLM-2024-001 |
+| currency | `\$[\d,]+\.\d{2}` | $23,370.80 |
+| date | `(?:January|...|December)\s+\d{1,2},\s+\d{4}` | January 12, 2024 |
+| time | `\d{1,2}:\d{2}(?::\d{2})?\s*(?:AM|PM)` | 7:42 AM |
+| vin | `[A-HJ-NPR-Z0-9]{17}` | 1HGCV1F39LA012345 |
+| phone | `\(\d{3}\)\s*\d{3}-\d{4}` | (213) 555-0147 |
+| percentage | `\d+\.?\d*%` | 0.14% |
+| policy_number | `POL-\d{4}-[A-Z]{3}-\d{5}` | POL-2024-VEH-45782 |
+
+#### Two Test Modes
+
+**Mode 1: RAG Response Grading** (10 tests)
+- Query the RAG system, then grade the response using exact match
+- Tests: claim_id, policyholder, deductible, incident_date, total_claim, at_fault_driver, bac_level, claims_adjuster, pt_sessions, repair_cost
+
+**Mode 2: Standalone Regex Validation** (8 tests)
+- Test regex patterns against sample text (no RAG required)
+- Validates that patterns correctly extract expected formats
+
+#### Using Code-Based Graders in Streamlit
+
+Navigate to the **"🧪 Code-Based Graders"** tab:
+1. Select test mode: **RAG Response Grading** or **Standalone Regex Validation**
+2. Select/deselect individual test cases using the checkbox column
+3. Click **"Run RAG Grading"** or **"Run Regex Validation"**
+4. View results with pass/fail status and detailed breakdown
+5. Export results to CSV
+
+#### Example Results
+
+```
+RAG Response Grading Results:
+┌────────────┬─────────────────────────────────┬────────┬───────┐
+│ Test ID    │ Query                           │ Passed │ Score │
+├────────────┼─────────────────────────────────┼────────┼───────┤
+│ CBG_RAG_01 │ What is the claim ID?           │ ✓      │ 1     │
+│ CBG_RAG_02 │ Who is the policyholder?        │ ✓      │ 1     │
+│ CBG_RAG_03 │ What was the collision deduct...│ ✓      │ 1     │
+│ ...        │ ...                             │ ...    │ ...   │
+└────────────┴─────────────────────────────────┴────────┴───────┘
+Summary: 10/10 passed (100%)
+```
+
+#### Implementation Files
+
+| File | Purpose |
+|------|---------|
+| `src/evaluation/code_graders.py` | Grader classes (ExactMatch, Regex) |
+| `src/evaluation/code_grader_tests.py` | Test case definitions (18 total) |
+| `streamlit_app.py` | UI tab implementation |
+
+---
+
 ### Test Suite
 
 **10 Test Queries** (5 Summary + 5 Needle) defined in `src/evaluation/test_queries.py`:
