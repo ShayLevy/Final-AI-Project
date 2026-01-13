@@ -30,6 +30,7 @@ December 15, 2024
 
 ---
 
+
 ## Overview
 
 This project implements a production-grade insurance claim retrieval system using:
@@ -45,8 +46,10 @@ This project implements a production-grade insurance claim retrieval system usin
 - **Regression tracking** for monitoring evaluation performance over time with baseline management and alerts
 
 <p align="center">
-      <img src="https://github.com/ShayLevy/Midterm-Coding-Assignment/blob/main/app.png" style="border: 3px solid black;">
+      <img width="100%" src="app.png">
 </p>
+      
+
 
 ### Key Capabilities
 
@@ -72,6 +75,8 @@ This project demonstrates real-world GenAI engineering skills:
 ✅ **Professional Code**: Modular, documented, testable
 
 ---
+
+
 
 ## System Architecture
 
