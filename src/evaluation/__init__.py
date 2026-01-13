@@ -1,4 +1,4 @@
-"""Evaluation modules for LLM-as-a-judge and code-based graders"""
+"""Evaluation modules for LLM-as-a-judge, code-based graders, and regression tracking"""
 from .judge import LLMJudge
 from .test_queries import TestSuite
 from .code_graders import (
@@ -10,6 +10,7 @@ from .code_graders import (
     FACT_GROUPS,
 )
 from .code_grader_tests import CodeGraderTestSuite
+from .regression import RegressionTracker, EvaluationRun, Baseline
 
 __all__ = [
     'LLMJudge',
@@ -21,4 +22,7 @@ __all__ = [
     'GROUND_TRUTH_ALTERNATIVES',
     'REGEX_PATTERNS',
     'FACT_GROUPS',
+    'RegressionTracker',
+    'EvaluationRun',
+    'Baseline',
 ]

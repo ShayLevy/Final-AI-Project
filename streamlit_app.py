@@ -23,6 +23,7 @@ sys.path.insert(0, str(Path(__file__).parent))
 
 from src.indexing.document_loader import InsuranceClaimLoader
 from src.indexing.chunking import HierarchicalChunker
+from src.evaluation.regression import RegressionTracker
 
 # Page config
 st.set_page_config(
@@ -1988,6 +1989,153 @@ else:
                     """)
 
         # ==========================================================================
+        # REGRESSION TRACKING SECTION
+        # ==========================================================================
+        st.divider()
+        st.subheader("Regression Tracking")
+
+        # Initialize tracker
+        tracker = RegressionTracker()
+
+        # Determine current evaluation type based on which results exist
+        current_eval_type = None
+        current_results = None
+        if st.session_state.ragas_results:
+            current_eval_type = "ragas"
+            current_results = st.session_state.ragas_results
+        elif st.session_state.judge_results:
+            current_eval_type = "llm_judge"
+            current_results = st.session_state.judge_results
+
+        # Get baseline for current type
+        baseline = tracker.get_baseline(current_eval_type) if current_eval_type else None
+
+        # Baseline Management Panel
+        col1, col2, col3 = st.columns([2, 1, 1])
+
+        with col1:
+            if baseline:
+                st.success(f"**Active Baseline:** {baseline.created_at[:16]}")
+                st.caption(f"Type: {baseline.evaluation_type.upper().replace('_', '-')} | Description: {baseline.description or 'No description'}")
+                with st.expander("Baseline Scores"):
+                    for metric, score in baseline.aggregate_scores.items():
+                        if baseline.evaluation_type == "llm_judge":
+                            st.markdown(f"- **{metric.replace('_', ' ').title()}:** {score * 5:.2f}/5 ({score:.1%})")
+                        else:
+                            st.markdown(f"- **{metric.replace('_', ' ').title()}:** {score:.1%}")
+            else:
+                st.info("No baseline set. Run an evaluation and set it as baseline to enable regression tracking.")
+
+        with col2:
+            if current_results:
+                baseline_desc = st.text_input("Description:", key="baseline_desc_ragas",
+                                               placeholder="e.g., v1.0 release")
+                if st.button("Set as Baseline", type="primary", use_container_width=True, key="set_baseline_ragas"):
+                    run = tracker.record_run(current_eval_type, current_results)
+                    tracker.set_baseline(run.run_id, description=baseline_desc)
+                    st.success("Baseline set!")
+                    st.rerun()
+
+        with col3:
+            if baseline:
+                if st.button("Clear Baseline", type="secondary", use_container_width=True, key="clear_baseline_ragas"):
+                    tracker.clear_baseline(current_eval_type)
+                    st.success("Baseline cleared")
+                    st.rerun()
+
+        # Delta Comparison Display (when results and baseline exist)
+        if current_results and baseline:
+            st.divider()
+            st.markdown("### Comparison with Baseline")
+
+            # Record current run
+            current_run = tracker.record_run(current_eval_type, current_results)
+            deltas = tracker.calculate_deltas(current_run.run_id, compare_to="baseline")
+
+            if "error" not in deltas:
+                aggregate_deltas = deltas.get("aggregate", {})
+                current_scores = current_run.aggregate_scores
+
+                # Display aggregate deltas with visual indicators
+                delta_cols = st.columns(len(aggregate_deltas) if aggregate_deltas else 1)
+                for i, (metric, delta) in enumerate(aggregate_deltas.items()):
+                    with delta_cols[i % len(delta_cols)]:
+                        current_val = current_scores.get(metric, 0)
+
+                        # Format based on evaluation type
+                        if current_eval_type == "llm_judge":
+                            display_val = f"{current_val * 5:.2f}/5"
+                            delta_display = f"{delta * 5:+.2f}"
+                        else:
+                            display_val = f"{current_val:.1%}"
+                            delta_display = f"{delta:+.1%}"
+
+                        st.metric(
+                            label=metric.replace("_", " ").title(),
+                            value=display_val,
+                            delta=delta_display,
+                            delta_color="normal" if delta >= 0 else "inverse"
+                        )
+
+                # Regression Alerts
+                alerts = tracker.check_regressions(current_run.run_id)
+
+                if alerts:
+                    st.divider()
+                    st.markdown("### Regression Alerts")
+
+                    critical_alerts = [a for a in alerts if a["severity"] == "critical"]
+                    warning_alerts = [a for a in alerts if a["severity"] == "warning"]
+
+                    if critical_alerts:
+                        st.error(f"**{len(critical_alerts)} Critical Regression(s) Detected**")
+                        for alert in critical_alerts:
+                            st.markdown(f"- **{alert['metric'].replace('_', ' ').title()}**: {alert['message']}")
+
+                    if warning_alerts:
+                        st.warning(f"**{len(warning_alerts)} Warning-Level Change(s)**")
+                        for alert in warning_alerts:
+                            st.markdown(f"- {alert['message']}")
+                else:
+                    st.success("No regressions detected - all metrics within threshold!")
+
+        # Trend Visualization
+        history = tracker.get_history(current_eval_type, limit=10) if current_eval_type else []
+
+        if len(history) >= 2:
+            st.divider()
+            st.markdown("### Performance Trends")
+
+            import pandas as pd
+
+            # Build dataframe for charting
+            trend_data = []
+            for run in reversed(history):  # Oldest first for chart
+                row = {"Run": run.timestamp[5:16]}  # Short timestamp
+                for metric, score in run.aggregate_scores.items():
+                    if current_eval_type == "llm_judge":
+                        row[metric.replace("_", " ").title()] = score * 5  # Convert to 1-5 scale
+                    else:
+                        row[metric.replace("_", " ").title()] = score * 100  # Convert to percentage
+                trend_data.append(row)
+
+            df_trends = pd.DataFrame(trend_data)
+
+            if len(df_trends.columns) > 1:
+                # Line chart for key metrics
+                metrics_to_chart = [m for m in df_trends.columns if m != "Run"]
+
+                st.line_chart(
+                    df_trends.set_index("Run")[metrics_to_chart],
+                    use_container_width=True
+                )
+
+                if current_eval_type == "llm_judge":
+                    st.caption("Y-axis: Score (1-5 scale)")
+                else:
+                    st.caption("Y-axis: Score (0-100%)")
+
+        # ==========================================================================
         # EVALUATION HISTORY SECTION
         # ==========================================================================
         if st.session_state.evaluation_history:
@@ -2068,13 +2216,24 @@ else:
         st.markdown('<div class="step-header"><h3 style="margin:0;">Code-Based Evaluation Graders</h3></div>', unsafe_allow_html=True)
 
         st.info("""
-        **Code-Based Graders** provide deterministic evaluation using multiple methods:
-        - **Fast, cheap, objective, reproducible, easy to debug**
-        - **Binary pass/fail scoring** (0 or 1)
-        - **No LLM calls required** for grading
+        **Code-Based Graders** provide deterministic evaluation - fast, cheap, objective, reproducible, and easy to debug.
+        All graders use **binary pass/fail scoring** (0 or 1) with **no LLM calls required**.
 
         Based on Anthropic's "Demystifying Evals for AI Agents" recommendations.
         """)
+
+        # Show grader types overview
+        with st.expander("View All Grader Types (36 Total Tests)", expanded=False):
+            st.markdown("""
+            | Grader Type | Tests | Description |
+            |-------------|-------|-------------|
+            | **Exact Match & Regex** | 10 | Query RAG system, verify exact values in response |
+            | **Numerical Validation** | 5 | Validate amounts with tolerance (±$0.01 or ±1%) |
+            | **Consistency Checking** | 3 | Verify chronological order, sum constraints, name consistency |
+            | **Key Fact Coverage** | 5 | Check all required facts present per topic |
+            | **Fuzzy String Matching** | 5 | Handle name variations with similarity threshold (80%+) |
+            | **Standalone Regex** | 8 | Validate regex patterns against sample text |
+            """)
 
         # Import code-based graders
         from src.evaluation.code_graders import CodeBasedGraders, GROUND_TRUTH, REGEX_PATTERNS, GROUND_TRUTH_NUMERICAL, FACT_GROUPS
@@ -2779,6 +2938,152 @@ else:
                     f"code_grader_regex_results_{results_data['timestamp'].replace(' ', '_').replace(':', '-')}.csv",
                     "text/csv"
                 )
+
+        # ==========================================================================
+        # CODE GRADERS REGRESSION TRACKING SECTION
+        # ==========================================================================
+        if st.session_state.code_grader_results:
+            st.divider()
+            st.subheader("Regression Tracking")
+
+            # Initialize tracker
+            code_tracker = RegressionTracker()
+
+            # Determine grader subtype from mode
+            grader_mode = st.session_state.code_grader_results.get("mode", "unknown")
+            grader_subtype = grader_mode.lower().replace(" ", "_").replace("&", "and")
+            eval_type = f"code_graders_{grader_subtype}"
+
+            # Get baseline for this grader type
+            code_baseline = code_tracker.get_baseline(eval_type)
+
+            # Baseline Management Panel
+            col1, col2, col3 = st.columns([2, 1, 1])
+
+            with col1:
+                if code_baseline:
+                    baseline_pass_rate = code_baseline.aggregate_scores.get("pass_rate", 0) * 100
+                    st.success(f"**Active Baseline:** {code_baseline.created_at[:16]}")
+                    st.caption(f"Type: {grader_mode} | Pass Rate: {baseline_pass_rate:.1f}% | {code_baseline.description or 'No description'}")
+                else:
+                    st.info(f"No baseline set for {grader_mode}. Run tests and set as baseline to track regressions.")
+
+            with col2:
+                baseline_desc_code = st.text_input("Description:", key=f"baseline_desc_{grader_subtype}",
+                                                    placeholder="e.g., v1.0 release")
+                if st.button("Set as Baseline", type="primary", use_container_width=True, key=f"set_baseline_{grader_subtype}"):
+                    code_run = code_tracker.record_run(eval_type, st.session_state.code_grader_results, grader_subtype=grader_subtype)
+                    code_tracker.set_baseline(code_run.run_id, description=baseline_desc_code)
+                    st.success("Baseline set!")
+                    st.rerun()
+
+            with col3:
+                if code_baseline:
+                    if st.button("Clear Baseline", type="secondary", use_container_width=True, key=f"clear_baseline_{grader_subtype}"):
+                        code_tracker.clear_baseline(eval_type)
+                        st.success("Baseline cleared")
+                        st.rerun()
+
+            # Delta Comparison Display
+            if code_baseline:
+                st.divider()
+                st.markdown("### Comparison with Baseline")
+
+                # Record current run and calculate deltas
+                code_run = code_tracker.record_run(eval_type, st.session_state.code_grader_results, grader_subtype=grader_subtype)
+
+                current_pass_rate = st.session_state.code_grader_results["summary"]["pass_rate"]
+                baseline_pass_rate = code_baseline.aggregate_scores.get("pass_rate", 0) * 100
+                delta = current_pass_rate - baseline_pass_rate
+
+                col1, col2, col3 = st.columns(3)
+                with col1:
+                    st.metric(
+                        "Pass Rate vs Baseline",
+                        f"{current_pass_rate:.1f}%",
+                        f"{delta:+.1f}%",
+                        delta_color="normal" if delta >= 0 else "inverse"
+                    )
+                with col2:
+                    st.metric(
+                        "Tests Passed",
+                        f"{st.session_state.code_grader_results['summary']['passed']}/{st.session_state.code_grader_results['summary']['total_tests']}",
+                    )
+                with col3:
+                    st.metric(
+                        "Baseline Pass Rate",
+                        f"{baseline_pass_rate:.1f}%",
+                    )
+
+                # Per-Query Regression Table
+                st.markdown("**Per-Query Comparison**")
+
+                comparison_data = []
+                for result in st.session_state.code_grader_results["results"]:
+                    query_id = result.get("test_id", "unknown")
+                    current_passed = result.get("passed", False)
+
+                    # Get baseline status for this query
+                    baseline_query = code_baseline.per_query_scores.get(query_id, {})
+                    baseline_passed_score = baseline_query.get("passed")
+                    baseline_passed = baseline_passed_score == 1.0 if baseline_passed_score is not None else None
+
+                    # Determine status
+                    if baseline_passed is None:
+                        status = "NEW"
+                        status_icon = "🆕"
+                    elif current_passed and not baseline_passed:
+                        status = "IMPROVED"
+                        status_icon = "📈"
+                    elif not current_passed and baseline_passed:
+                        status = "REGRESSED"
+                        status_icon = "📉"
+                    else:
+                        status = "UNCHANGED"
+                        status_icon = "➖"
+
+                    comparison_data.append({
+                        "Query ID": query_id,
+                        "Current": "✅ PASS" if current_passed else "❌ FAIL",
+                        "Baseline": "✅ PASS" if baseline_passed else ("❌ FAIL" if baseline_passed is not None else "N/A"),
+                        "Status": f"{status_icon} {status}"
+                    })
+
+                df_comparison = pd.DataFrame(comparison_data)
+
+                # Highlight regressions and improvements
+                def highlight_status(row):
+                    if "REGRESSED" in row["Status"]:
+                        return ["background-color: #ffcccc"] * len(row)
+                    elif "IMPROVED" in row["Status"]:
+                        return ["background-color: #ccffcc"] * len(row)
+                    return [""] * len(row)
+
+                st.dataframe(
+                    df_comparison.style.apply(highlight_status, axis=1),
+                    hide_index=True,
+                    use_container_width=True
+                )
+
+                # Regression Alerts
+                alerts = code_tracker.check_regressions(code_run.run_id)
+
+                if alerts:
+                    st.divider()
+                    critical_alerts = [a for a in alerts if a["severity"] == "critical"]
+                    warning_alerts = [a for a in alerts if a["severity"] == "warning"]
+
+                    if critical_alerts:
+                        st.error(f"**{len(critical_alerts)} Critical Regression(s) Detected**")
+                        for alert in critical_alerts:
+                            st.markdown(f"- {alert['message']}")
+
+                    if warning_alerts:
+                        st.warning(f"**{len(warning_alerts)} Warning-Level Change(s)**")
+                        for alert in warning_alerts:
+                            st.markdown(f"- {alert['message']}")
+                else:
+                    st.success("No regressions detected - all metrics within threshold!")
 
         # Ground Truth Reference
         with st.expander("📋 View Ground Truth Reference"):

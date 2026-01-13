@@ -42,6 +42,7 @@ This project implements a production-grade insurance claim retrieval system usin
 - **LLM-as-a-judge** evaluation framework
 - **RAGAS** for RAG pipeline evaluation metrics (Faithfulness, Answer Relevancy, Context Precision/Recall)
 - **Code-based evaluation graders** (Exact Match, Regex, Numerical Validation, Consistency Checking, Key Fact Coverage, Fuzzy Matching)
+- **Regression tracking** for monitoring evaluation performance over time with baseline management and alerts
 
 <p align="center">
       <img src="https://github.com/ShayLevy/Midterm-Coding-Assignment/blob/main/app.png" style="border: 3px solid black;">
@@ -55,6 +56,7 @@ This project implements a production-grade insurance claim retrieval system usin
 ✅ Route queries intelligently to appropriate retrieval strategies \
 ✅ Evaluate system performance objectively using separate judge model \
 ✅ Deterministic code-based graders for fast, reproducible evaluation \
+✅ Regression tracking with baseline comparison and trend visualization
 
 
 ### Educational Value
@@ -950,7 +952,39 @@ Summary: 10/10 passed (100%)
 |------|---------|
 | `src/evaluation/code_graders.py` | All 6 grader methods + ground truth data |
 | `src/evaluation/code_grader_tests.py` | Test case definitions (36 total) |
+| `src/evaluation/regression.py` | Regression tracking system |
 | `streamlit_app.py` | UI tab with grader type selector |
+
+#### Regression Tracking
+
+The system includes **regression tracking** to monitor evaluation performance over time:
+
+| Feature | Description |
+|---------|-------------|
+| **Baseline Management** | Set any evaluation run as baseline, with description |
+| **Delta Calculations** | Compare current vs baseline with visual indicators |
+| **Regression Alerts** | Warning/Critical alerts when metrics drop below thresholds |
+| **Trend Visualization** | Line charts showing performance over last 10 runs |
+| **Per-Query Comparison** | Table showing IMPROVED/REGRESSED/UNCHANGED status |
+
+**Default Regression Thresholds:**
+- RAGAS metrics: 5% drop triggers warning
+- LLM-as-a-Judge: 10% drop (0.5 on 5-point scale)
+- Code graders: 10% drop in pass rate
+
+**Using Regression Tracking:**
+1. Run an evaluation (RAGAS, LLM-as-a-Judge, or Code-Based Graders)
+2. Click "Set as Baseline" to establish reference point
+3. Run subsequent evaluations to see deltas and trend charts
+4. Regression alerts appear automatically when metrics drop
+
+**Storage Structure:**
+```
+evaluation_results/
+├── baselines/           # Baseline JSON files per evaluation type
+├── history/             # History JSON files per evaluation type
+└── runs/                # Individual evaluation run files
+```
 
 ---
 
