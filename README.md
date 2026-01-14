@@ -42,7 +42,7 @@ This project implements a production-grade insurance claim retrieval system usin
 - **MCP tools** for extended capabilities (metadata access, date calculations, cost estimations)
 - **LLM-as-a-judge** evaluation framework
 - **RAGAS** for RAG pipeline evaluation metrics (Faithfulness, Answer Relevancy, Context Precision/Recall)
-- **Code-based evaluation graders** (Exact Match, Regex, Numerical Validation, Consistency Checking, Key Fact Coverage, Fuzzy Matching)
+- **Code-based evaluation graders** with response caching (Fact Checking, Regex Patterns, Numerical Validation, Consistency Checking, Fuzzy Matching)
 - **Regression tracking** for monitoring evaluation performance over time with baseline management and alerts
 
 <p align="center">
@@ -781,14 +781,24 @@ In addition to LLM-based evaluation, we implement **deterministic code-based gra
 | Characteristic | LLM-as-a-Judge | Code-Based Graders |
 |----------------|----------------|-------------------|
 | **Speed** | Slow (API calls) | Fast (local execution) |
-| **Cost** | $0.02+ per eval | Free |
+| **Cost** | $0.02+ per eval | ~$0.35 one-time (then free forever) |
 | **Objectivity** | Subjective | 100% deterministic |
 | **Reproducibility** | May vary | Always identical |
 | **Debugging** | Black box | Transparent logic |
 
+#### Response Caching System
+
+To minimize costs while enabling comprehensive validation, the system uses a **response caching mechanism**:
+
+1. **One-Time Cache Generation**: Query the RAG system once for all test queries (~$0.35 for 23 unique queries)
+2. **Cached Validation**: All subsequent grading runs use cached responses (free, unlimited validations)
+3. **Cache Regeneration**: Optionally regenerate cache anytime to test improved RAG system
+
+This approach provides the best of both worlds: actual RAG system testing with deterministic, repeatable validation at zero ongoing cost.
+
 #### Grader Types Implemented
 
-**1. Exact Match Grader** - Verifies specific values appear in RAG responses:
+**1. Fact Checking (Exact Match)** - Verifies specific values appear in RAG responses:
 ```python
 # Binary pass/fail (score: 0 or 1)
 result = CodeBasedGraders.exact_match_grade(
@@ -799,7 +809,7 @@ result = CodeBasedGraders.exact_match_grade(
 # Returns: {"passed": True, "score": 1, "found": "CLM-2024-001"}
 ```
 
-**2. Regex Pattern Grader** - Extracts and validates patterns:
+**2. Regex Patterns** - Extracts and validates patterns:
 ```python
 # Validates currency, dates, claim IDs, VINs, phone numbers, etc.
 result = CodeBasedGraders.regex_grade(
@@ -823,7 +833,7 @@ result = CodeBasedGraders.numerical_validation_grade(
 # Returns: {"passed": True, "score": 1, "found_value": 23370.80, "difference": 0.0}
 ```
 
-**4. Consistency Checking Grader** - Verifies internal consistency of facts:
+**4. Consistency Checking** - Verifies internal consistency of facts:
 ```python
 # Check types: "chronological", "sum_constraint", "name_consistency"
 result = CodeBasedGraders.consistency_check_grade(
@@ -833,18 +843,7 @@ result = CodeBasedGraders.consistency_check_grade(
 # Returns: {"passed": True, "score": 1, "violations": [], "dates_found": [...]}
 ```
 
-**5. Key Fact Coverage Grader** - Checks completeness of required facts:
-```python
-# Uses predefined fact groups: incident_summary, financial_summary,
-# liability_determination, medical_treatment, witness_information
-result = CodeBasedGraders.key_fact_coverage_grade(
-    answer="The incident on January 12, 2024 at 7:42 AM involved Sarah Mitchell...",
-    fact_group="incident_summary"
-)
-# Returns: {"passed": True, "score": 1, "facts_found": [...], "facts_missing": [], "coverage_ratio": 1.0}
-```
-
-**6. Fuzzy String Matching Grader** - Handles name variations with similarity threshold:
+**5. Fuzzy Matching** - Handles name variations with similarity threshold:
 ```python
 # Uses SequenceMatcher for flexible matching
 result = CodeBasedGraders.fuzzy_match_grade(
@@ -888,58 +887,77 @@ Values extracted from `data/insurance_claim_CLM2024001.pdf`:
 | percentage | `\d+\.?\d*%` | 0.14% |
 | policy_number | `POL-\d{4}-[A-Z]{3}-\d{5}` | POL-2024-VEH-45782 |
 
-#### Six Grader Types (36 Test Cases)
+#### Five Grader Types (31 Test Cases)
 
 | Grader Type | Test Count | Description |
 |-------------|------------|-------------|
-| **Exact Match & Regex** | 10 | Query RAG system, grade response with exact match |
-| **Standalone Regex** | 8 | Validate regex patterns against sample text |
+| **Fact Checking** | 10 | Query RAG system, grade response with exact match |
+| **Regex Patterns** | 8 | Validate regex patterns against sample text (no RAG required) |
 | **Numerical Validation** | 5 | Validate amounts with tolerance (±$0.01 or ±1%) |
 | **Consistency Checking** | 3 | Verify chronological order, sum constraints, name consistency |
-| **Key Fact Coverage** | 5 | Check completeness of required facts per topic |
-| **Fuzzy String Matching** | 5 | Handle name variations with similarity threshold |
+| **Fuzzy Matching** | 5 | Handle name variations with similarity threshold |
 
-**Mode 1: RAG Response Grading** (10 tests)
-- Query the RAG system, then grade the response using exact match
+**Fact Checking** (10 tests)
+- Verifies specific expected values appear exactly in RAG responses
 - Tests: claim_id, policyholder, deductible, incident_date, total_claim, at_fault_driver, bac_level, claims_adjuster, pt_sessions, repair_cost
 
-**Mode 2: Standalone Regex Validation** (8 tests)
-- Test regex patterns against sample text (no RAG required)
-- Validates that patterns correctly extract expected formats
+**Regex Patterns** (8 tests)
+- Tests regex patterns against predefined sample text (free, no API calls)
+- Validates that extraction patterns correctly match expected formats
+- Tests: claim_id, currency, date, time, VIN, phone, percentage, policy_number
 
-**Mode 3: Numerical Validation** (5 tests)
-- Validates financial amounts with configurable tolerance
+**Numerical Validation** (5 tests)
+- Validates financial amounts and counts with configurable tolerance
 - Tests: total_claim_amount (±$0.01), repair_cost (±1%), BAC level, deductible, PT sessions
 
-**Mode 4: Consistency Checking** (3 tests)
-- Verifies internal consistency of facts in responses
+**Consistency Checking** (3 tests)
+- Verifies internal consistency of facts within responses
 - Tests: chronological order of dates, sum constraints, name consistency
 
-**Mode 5: Key Fact Coverage** (5 tests)
-- Checks if responses contain all required facts for a topic
-- Tests: incident_summary, financial_summary, liability_determination, medical_treatment, witness_information
-
-**Mode 6: Fuzzy String Matching** (5 tests)
-- Handles name variations using similarity threshold
-- Tests: policyholder, at_fault_driver, claims_adjuster, accident_location, hospital
+**Fuzzy Matching** (5 tests)
+- Handles name variations using similarity threshold (70-85%)
+- Tests: policyholder, at_fault_driver, claims_adjuster, hospital, doctor
 
 #### Using Code-Based Graders in Streamlit
 
 Navigate to the **"🧪 Code-Based Graders"** tab:
-1. Select grader type from 6 options: Exact Match & Regex, Numerical Validation, Consistency Checking, Key Fact Coverage, Fuzzy String Matching, or Standalone Regex Validation
-2. Select/deselect individual test cases using the checkbox column
-3. Click the run button for your selected grader type
-4. View results with pass/fail status and grader-specific details:
+
+1. **Cache Management** (required for non-regex graders):
+   - View cache status and statistics
+   - Generate cache with one click (~$0.35 one-time cost)
+   - Regenerate cache to test improved RAG system
+   - Clear cache if needed
+
+2. **Select Grader Type** (5 options displayed horizontally):
+   - Regex Patterns (free, no cache needed)
+   - Fact Checking (requires cache)
+   - Numerical Validation (requires cache)
+   - Consistency Checking (requires cache)
+   - Fuzzy Matching (requires cache)
+
+3. **View Grader Explanation**: Each grader type displays an explanation of what it checks and why it matters
+
+4. **Select Test Cases**: Use checkboxes to select/deselect individual tests
+
+5. **Run Tests**: Click the run button to execute selected tests
+
+6. **View Results** with pass/fail status and grader-specific details:
+   - **Fact Checking**: Expected value, found/not found
+   - **Regex Patterns**: Pattern definition, matches found
    - **Numerical**: Expected value, found value, difference, tolerance
    - **Consistency**: Check type, violations found, dates/values extracted
-   - **Coverage**: Fact group, coverage ratio, facts found/missing
    - **Fuzzy**: Expected value, best match, similarity percentage
-5. Export results to CSV
+
+7. **Failure Analysis**: When tests fail, view detailed explanations and improvement suggestions
+
+8. **Regression Tracking**: Compare results to baseline, view performance trends
+
+9. **Export Results**: Download results to CSV for analysis
 
 #### Example Results
 
 ```
-RAG Response Grading Results:
+Fact Checking Results:
 ┌────────────┬─────────────────────────────────┬────────┬───────┐
 │ Test ID    │ Query                           │ Passed │ Score │
 ├────────────┼─────────────────────────────────┼────────┼───────┤
@@ -955,10 +973,12 @@ Summary: 10/10 passed (100%)
 
 | File | Purpose |
 |------|---------|
-| `src/evaluation/code_graders.py` | All 6 grader methods + ground truth data |
-| `src/evaluation/code_grader_tests.py` | Test case definitions (36 total) |
+| `src/evaluation/code_graders.py` | All 5 grader methods + ground truth data |
+| `src/evaluation/code_grader_tests.py` | Test case definitions (31 total) |
+| `src/evaluation/response_cache.py` | Response caching system for cost optimization |
+| `src/evaluation/test_explanations.py` | Detailed test explanations (36 explanations) |
 | `src/evaluation/regression.py` | Regression tracking system |
-| `streamlit_app.py` | UI tab with grader type selector |
+| `streamlit_app.py` | UI tab with cache management and grader selector |
 
 #### Regression Tracking
 

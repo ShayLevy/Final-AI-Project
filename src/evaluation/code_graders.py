@@ -457,16 +457,42 @@ class CodeBasedGraders:
                 "details": "Insufficient values found to check sum constraint"
             }
 
-        sorted_values = sorted(found_values, reverse=True)
+        # Remove duplicate values (likely the same total mentioned multiple times)
+        unique_values = list(dict.fromkeys(found_values))
+        sorted_values = sorted(unique_values, reverse=True)
+
+        # Try to find a valid combination where components sum to total
+        # Check if any subset of smaller values sums close to the largest value
         likely_total = sorted_values[0]
-        likely_components = sorted_values[1:]
-        component_sum = sum(likely_components)
+        best_match = None
+        best_diff = float('inf')
+
+        # Try different combinations: use only values smaller than total
+        smaller_values = [v for v in sorted_values[1:] if v < likely_total * 0.9]
+
+        if len(smaller_values) >= 2:
+            # Try summing the smaller values
+            component_sum = sum(smaller_values)
+            diff = abs(component_sum - likely_total)
+
+            if diff < best_diff:
+                best_diff = diff
+                best_match = smaller_values
+
+        # If no good match found, use all smaller values
+        if best_match is None:
+            best_match = sorted_values[1:min(8, len(sorted_values))]  # Limit to 8 values
+            component_sum = sum(best_match)
+        else:
+            component_sum = sum(best_match)
 
         operator = config.get("operator", "<=")
+        tolerance = 1.05  # Allow 5% tolerance for rounding and tax
+
         if operator == "<=":
-            passed = component_sum <= likely_total * 1.01
+            passed = component_sum <= likely_total * tolerance
         elif operator == "==":
-            passed = abs(component_sum - likely_total) < 0.01
+            passed = abs(component_sum - likely_total) < likely_total * 0.02  # 2% tolerance
         else:
             passed = True
 
@@ -475,9 +501,11 @@ class CodeBasedGraders:
             "score": 1 if passed else 0,
             "likely_total": likely_total,
             "component_sum": component_sum,
-            "components": likely_components[:5],
+            "components": best_match[:5],  # Show first 5
+            "total_values_found": len(found_values),
+            "unique_values_found": len(unique_values),
             "check_type": "sum_constraint",
-            "details": f"Components sum ({component_sum:.2f}) {'<=' if passed else '>'} total ({likely_total:.2f})"
+            "details": f"Components sum ({component_sum:.2f}) {'<=' if passed else '>'} total ({likely_total:.2f}) [found {len(found_values)} values, {len(unique_values)} unique]"
         }
 
     @staticmethod

@@ -2213,623 +2213,202 @@ else:
     # TAB 4: Code-Based Graders
     # ==========================================================================
     elif selected_tab == "🧪 Code-Based Graders":
-        st.markdown('<div class="step-header"><h3 style="margin:0;">Code-Based Evaluation Graders</h3></div>', unsafe_allow_html=True)
-
-        st.info("""
-        **Code-Based Graders** provide deterministic evaluation - fast, cheap, objective, reproducible, and easy to debug.
-        All graders use **binary pass/fail scoring** (0 or 1) with **no LLM calls required**.
-
-        Based on Anthropic's "Demystifying Evals for AI Agents" recommendations.
-        """)
-
-        # Show grader types overview
-        with st.expander("View All Grader Types (36 Total Tests)", expanded=False):
-            st.markdown("""
-            | Grader Type | Tests | Description |
-            |-------------|-------|-------------|
-            | **Exact Match & Regex** | 10 | Query RAG system, verify exact values in response |
-            | **Numerical Validation** | 5 | Validate amounts with tolerance (±$0.01 or ±1%) |
-            | **Consistency Checking** | 3 | Verify chronological order, sum constraints, name consistency |
-            | **Key Fact Coverage** | 5 | Check all required facts present per topic |
-            | **Fuzzy String Matching** | 5 | Handle name variations with similarity threshold (80%+) |
-            | **Standalone Regex** | 8 | Validate regex patterns against sample text |
-            """)
+        st.markdown('<div class="step-header"><h3 style="margin:0;">Code-Based Graders with Response Caching</h3></div>', unsafe_allow_html=True)
 
         # Import code-based graders
-        from src.evaluation.code_graders import CodeBasedGraders, GROUND_TRUTH, REGEX_PATTERNS, GROUND_TRUTH_NUMERICAL, FACT_GROUPS
+        from src.evaluation.code_graders import CodeBasedGraders, GROUND_TRUTH, REGEX_PATTERNS
         from src.evaluation.code_grader_tests import CodeGraderTestSuite
+        from src.evaluation.response_cache import ResponseCacheManager, estimate_cache_cost
+
+        # Initialize cache manager
+        cache_manager = ResponseCacheManager()
+        cache_info = cache_manager.get_cache_info()
+        has_cache = cache_info["exists"] and cache_info["queries_count"] > 0
+
+        # Show info banner based on cache status
+        if has_cache:
+            cache_stats = cache_manager.get_cache_stats()
+            st.success(f"""
+            **✅ Cache Active** - {cache_stats['successful']} cached responses available.
+            All graders run against cached responses with **zero API costs**!
+            """)
+        else:
+            st.info("""
+            **💡 How It Works:**
+            1. **Generate Cache** (one-time cost ~$0.40): Query RAG system and save responses
+            2. **Run Graders** (unlimited, free): Validate cached responses with all 6 grader types
+            3. **Update Cache** (optional): Regenerate when system improves
+            """)
+
+        # Cache Management Section
+        with st.expander("🗄️ Cache Management", expanded=not has_cache):
+            if has_cache:
+                stats = cache_manager.get_cache_stats()
+                col1, col2, col3, col4 = st.columns(4)
+                with col1:
+                    st.metric("Cached Queries", stats['successful'])
+                with col2:
+                    st.metric("Failed", stats['failed'])
+                with col3:
+                    st.metric("Avg Length", f"{stats['avg_response_length']} chars")
+                with col4:
+                    st.metric("Cache Size", f"{stats['cache_size_kb']:.1f} KB")
+
+                st.caption(f"**Created:** {cache_info['created_at'][:19]}")
+
+                col_a, col_b = st.columns(2)
+                with col_a:
+                    if st.button("🔄 Regenerate Cache", help="Re-query RAG system (~$0.40)"):
+                        st.session_state.regenerate_cache = True
+                        st.rerun()
+                with col_b:
+                    if st.button("🗑️ Clear Cache", type="secondary"):
+                        cache_manager.clear_cache()
+                        st.success("Cache cleared!")
+                        st.rerun()
+            else:
+                st.markdown("**No cache found.** Generate cache to enable all grader types.")
+
+                # Show cost estimate
+                all_test_cases = []
+                all_test_cases.extend(CodeGraderTestSuite.get_rag_test_cases())
+                all_test_cases.extend(CodeGraderTestSuite.get_numerical_validation_test_cases())
+                all_test_cases.extend(CodeGraderTestSuite.get_consistency_check_test_cases())
+                all_test_cases.extend(CodeGraderTestSuite.get_fuzzy_match_test_cases())
+
+                cost_estimate = estimate_cache_cost(all_test_cases)
+
+                col1, col2, col3 = st.columns(3)
+                with col1:
+                    st.metric("Total Tests", cost_estimate['total_test_cases'])
+                with col2:
+                    st.metric("Unique Queries", cost_estimate['unique_queries'])
+                with col3:
+                    st.metric("Estimated Cost", f"${cost_estimate['estimated_total_cost']:.2f}")
+
+                st.caption("💡 Once cached, you can run unlimited validations for $0.00")
+
+                if st.button("⚡ Generate Cache Now", type="primary"):
+                    if 'system' not in st.session_state or st.session_state.system is None:
+                        st.error("Please upload and index a document first (use the Query tab)")
+                    else:
+                        st.session_state.generate_cache = True
+                        st.rerun()
+
+        # Handle cache generation
+        if st.session_state.get('generate_cache') or st.session_state.get('regenerate_cache'):
+            st.divider()
+            st.subheader("⚡ Generating Cache...")
+
+            all_test_cases = []
+            all_test_cases.extend(CodeGraderTestSuite.get_rag_test_cases())
+            all_test_cases.extend(CodeGraderTestSuite.get_numerical_validation_test_cases())
+            all_test_cases.extend(CodeGraderTestSuite.get_consistency_check_test_cases())
+            all_test_cases.extend(CodeGraderTestSuite.get_fuzzy_match_test_cases())
+
+            unique_queries = list(set(tc.get("query", "") for tc in all_test_cases if tc.get("query")))
+
+            progress_bar = st.progress(0)
+            status_text = st.empty()
+
+            def progress_callback(current, total, query):
+                progress_bar.progress(current / total)
+                status_text.text(f"Querying {current}/{total}: {query[:60]}...")
+
+            try:
+                cache_data = cache_manager.generate_cache(
+                    st.session_state.system,
+                    all_test_cases,
+                    progress_callback
+                )
+
+                status_text.text("Cache generation complete!")
+                st.success(f"✅ Successfully cached {cache_data['queries_count']} responses!")
+
+                # Clear flags
+                st.session_state.generate_cache = False
+                st.session_state.regenerate_cache = False
+
+                st.balloons()
+                st.rerun()
+
+            except Exception as e:
+                st.error(f"Cache generation failed: {str(e)}")
+                st.session_state.generate_cache = False
+                st.session_state.regenerate_cache = False
 
         # Initialize session state for code graders
         if 'code_grader_results' not in st.session_state:
             st.session_state.code_grader_results = None
-        if 'code_grader_mode' not in st.session_state:
-            st.session_state.code_grader_mode = "Exact Match & Regex"
-
-        # Grader type selector
-        grader_type = st.radio(
-            "Select Grader Type:",
-            [
-                "Exact Match & Regex",
-                "Numerical Validation",
-                "Consistency Checking",
-                "Key Fact Coverage",
-                "Fuzzy String Matching",
-                "Standalone Regex Validation"
-            ],
-            horizontal=True,
-            help="Select the type of code-based evaluation to run against the RAG system."
-        )
-        st.session_state.code_grader_mode = grader_type
 
         st.divider()
 
-        if grader_type == "Exact Match & Regex":
-            st.subheader("RAG Response Grading")
-            st.markdown("Query the RAG system, then apply code-based graders to evaluate the response.")
-
-            # Get RAG test cases
-            rag_test_cases = CodeGraderTestSuite.get_rag_test_cases()
-
-            # Display test cases with selection
-            st.markdown(f"**Available Test Cases ({len(rag_test_cases)})**")
-
-            # Build selection table
-            import pandas as pd
-            table_data = []
-            for tc in rag_test_cases:
-                table_data.append({
-                    "Select": True,
-                    "ID": tc["id"],
-                    "Query": tc["query"][:60] + "..." if len(tc["query"]) > 60 else tc["query"],
-                    "Expected": tc["expected_value"],
-                    "Category": tc.get("category", "other")
-                })
-
-            df = pd.DataFrame(table_data)
-
-            # Editable dataframe for selection
-            edited_df = st.data_editor(
-                df,
-                column_config={
-                    "Select": st.column_config.CheckboxColumn("Select", default=True),
-                    "ID": st.column_config.TextColumn("ID", width="small"),
-                    "Query": st.column_config.TextColumn("Query", width="large"),
-                    "Expected": st.column_config.TextColumn("Expected", width="medium"),
-                    "Category": st.column_config.TextColumn("Category", width="small")
-                },
-                disabled=["ID", "Query", "Expected", "Category"],
-                hide_index=True,
-                use_container_width=True,
-                key="rag_grader_table"
-            )
-
-            # Run evaluation button
-            selected_count = edited_df["Select"].sum()
-            st.markdown(f"**Selected: {selected_count} test cases**")
-
-            if st.button("🚀 Run RAG Grading", type="primary", disabled=selected_count == 0):
-                if 'system' not in st.session_state or st.session_state.system is None:
-                    st.error("Please upload and index a document first (use the Query tab)")
-                else:
-                    results = []
-                    progress_bar = st.progress(0)
-                    status_text = st.empty()
-
-                    selected_indices = edited_df[edited_df["Select"]].index.tolist()
-
-                    for i, idx in enumerate(selected_indices):
-                        test_case = rag_test_cases[idx]
-                        status_text.text(f"Running test {i+1}/{len(selected_indices)}: {test_case['id']}")
-
-                        # Query RAG system
-                        try:
-                            rag_result = st.session_state.system.query(test_case["query"])
-                            answer = rag_result.get("output", "")
-
-                            # Grade the response
-                            grade_result = CodeBasedGraders.run_rag_test(answer, test_case)
-                            grade_result["rag_answer"] = answer[:200] + "..." if len(answer) > 200 else answer
-                            results.append(grade_result)
-
-                        except Exception as e:
-                            results.append({
-                                "test_id": test_case["id"],
-                                "passed": False,
-                                "score": 0,
-                                "details": f"Error: {str(e)}",
-                                "rag_answer": ""
-                            })
-
-                        progress_bar.progress((i + 1) / len(selected_indices))
-
-                    status_text.text("Evaluation complete!")
-                    st.session_state.code_grader_results = {
-                        "mode": "RAG Response Grading",
-                        "results": results,
-                        "summary": CodeBasedGraders.calculate_summary(results),
-                        "timestamp": pd.Timestamp.now().strftime("%Y-%m-%d %H:%M:%S")
-                    }
-                    st.rerun()
-
-            # Display results
-            if st.session_state.code_grader_results and st.session_state.code_grader_results.get("mode") in ["RAG Response Grading", "Exact Match & Regex"]:
-                st.divider()
-                st.subheader("Results")
-
-                results_data = st.session_state.code_grader_results
-                summary = results_data["summary"]
-
-                # Summary metrics
-                col1, col2, col3, col4 = st.columns(4)
-                with col1:
-                    st.metric("Total Tests", summary["total_tests"])
-                with col2:
-                    pass_color = "green" if summary["pass_rate"] >= 80 else "orange" if summary["pass_rate"] >= 60 else "red"
-                    st.metric("Passed", summary["passed"], delta=None)
-                with col3:
-                    st.metric("Failed", summary["failed"])
-                with col4:
-                    st.metric("Pass Rate", f"{summary['pass_rate']:.1f}%")
-
-                # Detailed results
-                st.markdown("**Detailed Results**")
-                results_table = []
-                for r in results_data["results"]:
-                    results_table.append({
-                        "Test ID": r.get("test_id", ""),
-                        "Status": "✅ PASS" if r.get("passed") else "❌ FAIL",
-                        "Expected": r.get("expected", ""),
-                        "Found": r.get("found", "N/A"),
-                        "RAG Answer": r.get("rag_answer", "")[:100] + "..."
-                    })
-
-                st.dataframe(pd.DataFrame(results_table), use_container_width=True, hide_index=True)
-
-                # Export button
-                csv_data = pd.DataFrame(results_table).to_csv(index=False)
-                st.download_button(
-                    "📥 Export Results (CSV)",
-                    csv_data,
-                    f"code_grader_rag_results_{results_data['timestamp'].replace(' ', '_').replace(':', '-')}.csv",
-                    "text/csv"
-                )
-
-        elif grader_type == "Numerical Validation":
-            st.subheader("Numerical Validation Grading")
-            st.markdown("Validate numerical values (amounts, percentages, counts) with configurable tolerance.")
-
-            # Get numerical validation test cases
-            num_test_cases = CodeGraderTestSuite.get_numerical_validation_test_cases()
-
-            st.markdown(f"**Available Test Cases ({len(num_test_cases)})**")
-
-            import pandas as pd
-            table_data = []
-            for tc in num_test_cases:
-                table_data.append({
-                    "Select": True,
-                    "ID": tc["id"],
-                    "Query": tc["query"][:50] + "..." if len(tc["query"]) > 50 else tc["query"],
-                    "Expected": tc["expected_value"],
-                    "Tolerance": f"{tc['tolerance_value']} ({tc['tolerance_type']})",
-                    "Category": tc.get("category", "other")
-                })
-
-            df = pd.DataFrame(table_data)
-            edited_df = st.data_editor(
-                df,
-                column_config={
-                    "Select": st.column_config.CheckboxColumn("Select", default=True),
-                    "ID": st.column_config.TextColumn("ID", width="small"),
-                    "Query": st.column_config.TextColumn("Query", width="large"),
-                    "Expected": st.column_config.NumberColumn("Expected", width="small"),
-                    "Tolerance": st.column_config.TextColumn("Tolerance", width="medium"),
-                    "Category": st.column_config.TextColumn("Category", width="small")
-                },
-                disabled=["ID", "Query", "Expected", "Tolerance", "Category"],
-                hide_index=True,
-                use_container_width=True,
-                key="numerical_grader_table"
-            )
-
-            selected_count = edited_df["Select"].sum()
-            st.markdown(f"**Selected: {selected_count} test cases**")
-
-            if st.button("🚀 Run Numerical Validation", type="primary", disabled=selected_count == 0):
-                if 'system' not in st.session_state or st.session_state.system is None:
-                    st.error("Please upload and index a document first (use the Query tab)")
-                else:
-                    results = []
-                    progress_bar = st.progress(0)
-                    status_text = st.empty()
-                    selected_indices = edited_df[edited_df["Select"]].index.tolist()
-
-                    for i, idx in enumerate(selected_indices):
-                        test_case = num_test_cases[idx]
-                        status_text.text(f"Running test {i+1}/{len(selected_indices)}: {test_case['id']}")
-
-                        try:
-                            rag_result = st.session_state.system.query(test_case["query"])
-                            answer = rag_result.get("output", "")
-                            grade_result = CodeBasedGraders.run_rag_test(answer, test_case)
-                            grade_result["rag_answer"] = answer[:200] + "..." if len(answer) > 200 else answer
-                            results.append(grade_result)
-                        except Exception as e:
-                            results.append({
-                                "test_id": test_case["id"],
-                                "passed": False,
-                                "score": 0,
-                                "details": f"Error: {str(e)}",
-                                "rag_answer": ""
-                            })
-
-                        progress_bar.progress((i + 1) / len(selected_indices))
-
-                    status_text.text("Evaluation complete!")
-                    st.session_state.code_grader_results = {
-                        "mode": "Numerical Validation",
-                        "results": results,
-                        "summary": CodeBasedGraders.calculate_summary(results),
-                        "timestamp": pd.Timestamp.now().strftime("%Y-%m-%d %H:%M:%S")
-                    }
-                    st.rerun()
-
-            # Display results
-            if st.session_state.code_grader_results and st.session_state.code_grader_results.get("mode") == "Numerical Validation":
-                st.divider()
-                st.subheader("Results")
-                results_data = st.session_state.code_grader_results
-                summary = results_data["summary"]
-
-                col1, col2, col3, col4 = st.columns(4)
-                with col1:
-                    st.metric("Total Tests", summary["total_tests"])
-                with col2:
-                    st.metric("Passed", summary["passed"])
-                with col3:
-                    st.metric("Failed", summary["failed"])
-                with col4:
-                    st.metric("Pass Rate", f"{summary['pass_rate']:.1f}%")
-
-                st.markdown("**Detailed Results**")
-                results_table = []
-                for r in results_data["results"]:
-                    results_table.append({
-                        "Test ID": r.get("test_id", ""),
-                        "Status": "✅ PASS" if r.get("passed") else "❌ FAIL",
-                        "Expected": r.get("expected_value", ""),
-                        "Found": r.get("found_value", "N/A"),
-                        "Difference": f"{r.get('difference', 'N/A'):.4f}" if r.get('difference') is not None else "N/A",
-                        "RAG Answer": r.get("rag_answer", "")[:80] + "..."
-                    })
-
-                st.dataframe(pd.DataFrame(results_table), use_container_width=True, hide_index=True)
-
-        elif grader_type == "Consistency Checking":
-            st.subheader("Consistency Checking")
-            st.markdown("Verify internal consistency of facts (chronological order, sum constraints, name consistency).")
-
-            cons_test_cases = CodeGraderTestSuite.get_consistency_check_test_cases()
-
-            st.markdown(f"**Available Test Cases ({len(cons_test_cases)})**")
-
-            import pandas as pd
-            table_data = []
-            for tc in cons_test_cases:
-                table_data.append({
-                    "Select": True,
-                    "ID": tc["id"],
-                    "Query": tc["query"][:50] + "..." if len(tc["query"]) > 50 else tc["query"],
-                    "Check Type": tc["check_type"],
-                    "Category": tc.get("category", "other")
-                })
-
-            df = pd.DataFrame(table_data)
-            edited_df = st.data_editor(
-                df,
-                column_config={
-                    "Select": st.column_config.CheckboxColumn("Select", default=True),
-                    "ID": st.column_config.TextColumn("ID", width="small"),
-                    "Query": st.column_config.TextColumn("Query", width="large"),
-                    "Check Type": st.column_config.TextColumn("Check Type", width="medium"),
-                    "Category": st.column_config.TextColumn("Category", width="small")
-                },
-                disabled=["ID", "Query", "Check Type", "Category"],
-                hide_index=True,
-                use_container_width=True,
-                key="consistency_grader_table"
-            )
-
-            selected_count = edited_df["Select"].sum()
-            st.markdown(f"**Selected: {selected_count} test cases**")
-
-            if st.button("🚀 Run Consistency Checks", type="primary", disabled=selected_count == 0):
-                if 'system' not in st.session_state or st.session_state.system is None:
-                    st.error("Please upload and index a document first (use the Query tab)")
-                else:
-                    results = []
-                    progress_bar = st.progress(0)
-                    status_text = st.empty()
-                    selected_indices = edited_df[edited_df["Select"]].index.tolist()
-
-                    for i, idx in enumerate(selected_indices):
-                        test_case = cons_test_cases[idx]
-                        status_text.text(f"Running test {i+1}/{len(selected_indices)}: {test_case['id']}")
-
-                        try:
-                            rag_result = st.session_state.system.query(test_case["query"])
-                            answer = rag_result.get("output", "")
-                            grade_result = CodeBasedGraders.run_rag_test(answer, test_case)
-                            grade_result["rag_answer"] = answer[:200] + "..." if len(answer) > 200 else answer
-                            results.append(grade_result)
-                        except Exception as e:
-                            results.append({
-                                "test_id": test_case["id"],
-                                "passed": False,
-                                "score": 0,
-                                "details": f"Error: {str(e)}",
-                                "rag_answer": ""
-                            })
-
-                        progress_bar.progress((i + 1) / len(selected_indices))
-
-                    status_text.text("Evaluation complete!")
-                    st.session_state.code_grader_results = {
-                        "mode": "Consistency Checking",
-                        "results": results,
-                        "summary": CodeBasedGraders.calculate_summary(results),
-                        "timestamp": pd.Timestamp.now().strftime("%Y-%m-%d %H:%M:%S")
-                    }
-                    st.rerun()
-
-            if st.session_state.code_grader_results and st.session_state.code_grader_results.get("mode") == "Consistency Checking":
-                st.divider()
-                st.subheader("Results")
-                results_data = st.session_state.code_grader_results
-                summary = results_data["summary"]
-
-                col1, col2, col3, col4 = st.columns(4)
-                with col1:
-                    st.metric("Total Tests", summary["total_tests"])
-                with col2:
-                    st.metric("Passed", summary["passed"])
-                with col3:
-                    st.metric("Failed", summary["failed"])
-                with col4:
-                    st.metric("Pass Rate", f"{summary['pass_rate']:.1f}%")
-
-                st.markdown("**Detailed Results**")
-                results_table = []
-                for r in results_data["results"]:
-                    results_table.append({
-                        "Test ID": r.get("test_id", ""),
-                        "Status": "✅ PASS" if r.get("passed") else "❌ FAIL",
-                        "Check Type": r.get("check_type", ""),
-                        "Details": r.get("details", "")[:80],
-                        "RAG Answer": r.get("rag_answer", "")[:60] + "..."
-                    })
-
-                st.dataframe(pd.DataFrame(results_table), use_container_width=True, hide_index=True)
-
-        elif grader_type == "Key Fact Coverage":
-            st.subheader("Key Fact Coverage")
-            st.markdown("Check if responses contain all required facts for completeness.")
-
-            fact_test_cases = CodeGraderTestSuite.get_key_fact_coverage_test_cases()
-
-            st.markdown(f"**Available Test Cases ({len(fact_test_cases)})**")
-
-            import pandas as pd
-            table_data = []
-            for tc in fact_test_cases:
-                table_data.append({
-                    "Select": True,
-                    "ID": tc["id"],
-                    "Query": tc["query"][:50] + "..." if len(tc["query"]) > 50 else tc["query"],
-                    "Fact Group": tc["fact_group"],
-                    "Category": tc.get("category", "other")
-                })
-
-            df = pd.DataFrame(table_data)
-            edited_df = st.data_editor(
-                df,
-                column_config={
-                    "Select": st.column_config.CheckboxColumn("Select", default=True),
-                    "ID": st.column_config.TextColumn("ID", width="small"),
-                    "Query": st.column_config.TextColumn("Query", width="large"),
-                    "Fact Group": st.column_config.TextColumn("Fact Group", width="medium"),
-                    "Category": st.column_config.TextColumn("Category", width="small")
-                },
-                disabled=["ID", "Query", "Fact Group", "Category"],
-                hide_index=True,
-                use_container_width=True,
-                key="coverage_grader_table"
-            )
-
-            selected_count = edited_df["Select"].sum()
-            st.markdown(f"**Selected: {selected_count} test cases**")
-
-            if st.button("🚀 Run Fact Coverage Check", type="primary", disabled=selected_count == 0):
-                if 'system' not in st.session_state or st.session_state.system is None:
-                    st.error("Please upload and index a document first (use the Query tab)")
-                else:
-                    results = []
-                    progress_bar = st.progress(0)
-                    status_text = st.empty()
-                    selected_indices = edited_df[edited_df["Select"]].index.tolist()
-
-                    for i, idx in enumerate(selected_indices):
-                        test_case = fact_test_cases[idx]
-                        status_text.text(f"Running test {i+1}/{len(selected_indices)}: {test_case['id']}")
-
-                        try:
-                            rag_result = st.session_state.system.query(test_case["query"])
-                            answer = rag_result.get("output", "")
-                            grade_result = CodeBasedGraders.run_rag_test(answer, test_case)
-                            grade_result["rag_answer"] = answer[:200] + "..." if len(answer) > 200 else answer
-                            results.append(grade_result)
-                        except Exception as e:
-                            results.append({
-                                "test_id": test_case["id"],
-                                "passed": False,
-                                "score": 0,
-                                "details": f"Error: {str(e)}",
-                                "rag_answer": ""
-                            })
-
-                        progress_bar.progress((i + 1) / len(selected_indices))
-
-                    status_text.text("Evaluation complete!")
-                    st.session_state.code_grader_results = {
-                        "mode": "Key Fact Coverage",
-                        "results": results,
-                        "summary": CodeBasedGraders.calculate_summary(results),
-                        "timestamp": pd.Timestamp.now().strftime("%Y-%m-%d %H:%M:%S")
-                    }
-                    st.rerun()
-
-            if st.session_state.code_grader_results and st.session_state.code_grader_results.get("mode") == "Key Fact Coverage":
-                st.divider()
-                st.subheader("Results")
-                results_data = st.session_state.code_grader_results
-                summary = results_data["summary"]
-
-                col1, col2, col3, col4 = st.columns(4)
-                with col1:
-                    st.metric("Total Tests", summary["total_tests"])
-                with col2:
-                    st.metric("Passed", summary["passed"])
-                with col3:
-                    st.metric("Failed", summary["failed"])
-                with col4:
-                    st.metric("Pass Rate", f"{summary['pass_rate']:.1f}%")
-
-                st.markdown("**Detailed Results**")
-                results_table = []
-                for r in results_data["results"]:
-                    missing = [f["key"] for f in r.get("facts_missing", [])]
-                    results_table.append({
-                        "Test ID": r.get("test_id", ""),
-                        "Status": "✅ PASS" if r.get("passed") else "❌ FAIL",
-                        "Fact Group": r.get("fact_group", ""),
-                        "Coverage": f"{r.get('facts_found_count', 0)}/{r.get('total_facts', 0)}",
-                        "Missing Facts": ", ".join(missing) if missing else "None"
-                    })
-
-                st.dataframe(pd.DataFrame(results_table), use_container_width=True, hide_index=True)
-
-        elif grader_type == "Fuzzy String Matching":
-            st.subheader("Fuzzy String Matching")
-            st.markdown("Handle name and string variations using similarity matching.")
-
-            fuzzy_test_cases = CodeGraderTestSuite.get_fuzzy_match_test_cases()
-
-            st.markdown(f"**Available Test Cases ({len(fuzzy_test_cases)})**")
-
-            import pandas as pd
-            table_data = []
-            for tc in fuzzy_test_cases:
-                table_data.append({
-                    "Select": True,
-                    "ID": tc["id"],
-                    "Query": tc["query"][:50] + "..." if len(tc["query"]) > 50 else tc["query"],
-                    "Expected": tc["expected_value"],
-                    "Threshold": f"{tc['similarity_threshold']*100:.0f}%",
-                    "Category": tc.get("category", "other")
-                })
-
-            df = pd.DataFrame(table_data)
-            edited_df = st.data_editor(
-                df,
-                column_config={
-                    "Select": st.column_config.CheckboxColumn("Select", default=True),
-                    "ID": st.column_config.TextColumn("ID", width="small"),
-                    "Query": st.column_config.TextColumn("Query", width="large"),
-                    "Expected": st.column_config.TextColumn("Expected", width="medium"),
-                    "Threshold": st.column_config.TextColumn("Threshold", width="small"),
-                    "Category": st.column_config.TextColumn("Category", width="small")
-                },
-                disabled=["ID", "Query", "Expected", "Threshold", "Category"],
-                hide_index=True,
-                use_container_width=True,
-                key="fuzzy_grader_table"
-            )
-
-            selected_count = edited_df["Select"].sum()
-            st.markdown(f"**Selected: {selected_count} test cases**")
-
-            if st.button("🚀 Run Fuzzy Matching", type="primary", disabled=selected_count == 0):
-                if 'system' not in st.session_state or st.session_state.system is None:
-                    st.error("Please upload and index a document first (use the Query tab)")
-                else:
-                    results = []
-                    progress_bar = st.progress(0)
-                    status_text = st.empty()
-                    selected_indices = edited_df[edited_df["Select"]].index.tolist()
-
-                    for i, idx in enumerate(selected_indices):
-                        test_case = fuzzy_test_cases[idx]
-                        status_text.text(f"Running test {i+1}/{len(selected_indices)}: {test_case['id']}")
-
-                        try:
-                            rag_result = st.session_state.system.query(test_case["query"])
-                            answer = rag_result.get("output", "")
-                            grade_result = CodeBasedGraders.run_rag_test(answer, test_case)
-                            grade_result["rag_answer"] = answer[:200] + "..." if len(answer) > 200 else answer
-                            results.append(grade_result)
-                        except Exception as e:
-                            results.append({
-                                "test_id": test_case["id"],
-                                "passed": False,
-                                "score": 0,
-                                "details": f"Error: {str(e)}",
-                                "rag_answer": ""
-                            })
-
-                        progress_bar.progress((i + 1) / len(selected_indices))
-
-                    status_text.text("Evaluation complete!")
-                    st.session_state.code_grader_results = {
-                        "mode": "Fuzzy String Matching",
-                        "results": results,
-                        "summary": CodeBasedGraders.calculate_summary(results),
-                        "timestamp": pd.Timestamp.now().strftime("%Y-%m-%d %H:%M:%S")
-                    }
-                    st.rerun()
-
-            if st.session_state.code_grader_results and st.session_state.code_grader_results.get("mode") == "Fuzzy String Matching":
-                st.divider()
-                st.subheader("Results")
-                results_data = st.session_state.code_grader_results
-                summary = results_data["summary"]
-
-                col1, col2, col3, col4 = st.columns(4)
-                with col1:
-                    st.metric("Total Tests", summary["total_tests"])
-                with col2:
-                    st.metric("Passed", summary["passed"])
-                with col3:
-                    st.metric("Failed", summary["failed"])
-                with col4:
-                    st.metric("Pass Rate", f"{summary['pass_rate']:.1f}%")
-
-                st.markdown("**Detailed Results**")
-                results_table = []
-                for r in results_data["results"]:
-                    results_table.append({
-                        "Test ID": r.get("test_id", ""),
-                        "Status": "✅ PASS" if r.get("passed") else "❌ FAIL",
-                        "Expected": r.get("expected_value", ""),
-                        "Best Match": r.get("best_match", "N/A"),
-                        "Similarity": f"{r.get('similarity_ratio', 0)*100:.1f}%",
-                        "Threshold": f"{r.get('similarity_threshold', 0)*100:.0f}%"
-                    })
-
-                st.dataframe(pd.DataFrame(results_table), use_container_width=True, hide_index=True)
-
-        elif grader_type == "Standalone Regex Validation":
+        # Grader Type Selector
+        grader_type = st.radio(
+            "Select Grader Type:",
+            [
+                "Regex Patterns",
+                "Fact Checking",
+                "Numerical",
+                "Consistency",
+                "Fuzzy Match"
+            ],
+            horizontal=True,
+            help="Cached graders require cache generation (~$0.35 one-time). Regex Patterns is always free."
+        )
+
+        # Map short names to full names for internal use
+        grader_name_map = {
+            "Regex Patterns": "Standalone Regex Validation (Always Free)",
+            "Fact Checking": "Exact Match & Regex (Cached)",
+            "Numerical": "Numerical Validation (Cached)",
+            "Consistency": "Consistency Checking (Cached)",
+            "Fuzzy Match": "Fuzzy String Matching (Cached)"
+        }
+
+        # Grader type explanations
+        grader_explanations = {
+            "Regex Patterns": {
+                "title": "Regex Pattern Validation",
+                "description": "Tests regex patterns against predefined sample text to verify they correctly extract structured data (claim IDs, dates, currency, VINs, phone numbers, etc.). Validates extraction logic before deployment. No API calls - completely free.",
+                "icon": "🔍"
+            },
+            "Fact Checking": {
+                "title": "Fact Checking & Exact Match",
+                "description": "Verifies that specific expected values (names, IDs, dates, amounts) appear exactly in RAG responses. Ensures critical facts are present and accurate. Uses cached responses for zero-cost validation.",
+                "icon": "✓"
+            },
+            "Numerical": {
+                "title": "Numerical Validation",
+                "description": "Validates numerical values (dollar amounts, percentages, counts) within acceptable tolerance ranges. Catches calculation errors while allowing minor rounding differences.",
+                "icon": "🔢"
+            },
+            "Consistency": {
+                "title": "Consistency Checking",
+                "description": "Validates internal consistency of facts within responses: dates in chronological order, component costs don't exceed totals, names referenced consistently.",
+                "icon": "⚖️"
+            },
+            "Fuzzy Match": {
+                "title": "Fuzzy String Matching",
+                "description": "Matches names and strings allowing for variations (typos, abbreviations, word order) using similarity scoring. Handles real-world data variations gracefully.",
+                "icon": "≈"
+            }
+        }
+
+        # Show explanation for selected grader
+        selected_display = next((k for k, v in grader_name_map.items() if v == grader_type or k == grader_type), "Regex Patterns")
+        explanation = grader_explanations.get(selected_display, {})
+        if explanation:
+            st.info(f"{explanation['icon']} **{explanation['title']}**: {explanation['description']}")
+
+        grader_type = grader_name_map.get(grader_type, grader_type)
+
+        st.divider()
+
+        # Show appropriate grader UI based on selection
+        if grader_type == "Standalone Regex Validation (Always Free)":
             st.subheader("Standalone Regex Validation")
-            st.markdown("Test regex patterns against sample text to verify pattern correctness.")
+            st.markdown("Test regex patterns against sample text to verify pattern correctness. **100% Free - No API calls.**")
 
             # Get regex test cases
             regex_test_cases = CodeGraderTestSuite.get_regex_test_cases()
@@ -2920,15 +2499,41 @@ else:
 
                 st.dataframe(pd.DataFrame(results_table), use_container_width=True, hide_index=True)
 
-                # Show full pattern details in expander
-                with st.expander("View Full Pattern Details"):
-                    for r in results_data["results"]:
-                        status_icon = "✅" if r.get("passed") else "❌"
-                        st.markdown(f"**{status_icon} {r.get('pattern_name', '')}**")
-                        st.code(r.get("pattern", ""), language="regex")
-                        st.markdown(f"Matches: `{r.get('matches', [])}`")
-                        st.markdown(f"Sample: {r.get('sample_text', '')}")
-                        st.divider()
+                # Show failure analysis if any tests failed
+                failed_results = [r for r in results_data["results"] if not r.get("passed")]
+                if failed_results:
+                    st.divider()
+                    st.markdown("### ❌ Failure Analysis & Improvement Suggestions")
+
+                    for r in failed_results:
+                        with st.expander(f"🔍 {r.get('test_id', 'Unknown')} - {r.get('pattern_name', 'Unknown Pattern')}", expanded=True):
+                            st.markdown("**Why it failed:**")
+                            st.error(f"Pattern did not match expected values in sample text. Found: `{r.get('matches', [])}`")
+
+                            st.markdown("**What to improve:**")
+                            pattern_name = r.get('pattern_name', '')
+
+                            if 'claim_id' in pattern_name.lower():
+                                st.info("• Check if pattern matches format CLM-YYYY-NNN\n• Verify year digits (4) and claim number digits (3)\n• Ensure hyphens are included in pattern")
+                            elif 'currency' in pattern_name.lower():
+                                st.info("• Ensure pattern captures dollar sign ($)\n• Check comma placement for thousands\n• Verify decimal point and two-digit cents")
+                            elif 'date' in pattern_name.lower():
+                                st.info("• Verify month names are captured (January-December)\n• Check day format (1-2 digits)\n• Ensure 4-digit year is captured")
+                            elif 'time' in pattern_name.lower():
+                                st.info("• Check hour format (1-2 digits)\n• Verify colon separator\n• Ensure AM/PM is captured (case-insensitive)")
+                            elif 'vin' in pattern_name.lower():
+                                st.info("• VIN must be exactly 17 characters\n• Should be alphanumeric (A-Z, 0-9)\n• No special characters allowed")
+                            elif 'phone' in pattern_name.lower():
+                                st.info("• Check area code format: (XXX)\n• Verify separator between area code and number\n• Ensure 7-digit number format: XXX-XXXX")
+                            elif 'percentage' in pattern_name.lower():
+                                st.info("• Check decimal point placement\n• Verify percentage sign (%) is captured\n• Ensure 2-3 digit precision")
+                            elif 'policy' in pattern_name.lower():
+                                st.info("• Verify format: POL-YYYY-XXX-NNNNN\n• Check year (4 digits), category (3 letters), number (5 digits)\n• Ensure all hyphens are present")
+                            else:
+                                st.info("• Review the regex pattern syntax\n• Test pattern with sample text\n• Check for escaped special characters")
+
+                            st.markdown("**Sample text tested:**")
+                            st.code(r.get('sample_text', 'No sample text available'))
 
                 # Export button
                 csv_data = pd.DataFrame(results_table).to_csv(index=False)
@@ -2936,6 +2541,254 @@ else:
                     "📥 Export Results (CSV)",
                     csv_data,
                     f"code_grader_regex_results_{results_data['timestamp'].replace(' ', '_').replace(':', '-')}.csv",
+                    "text/csv"
+                )
+
+        else:
+            # Cached graders - require cache
+            if not has_cache:
+                st.warning("⚠️ **Cache required for this grader type.**")
+                st.info("Please generate cache using the 'Cache Management' section above (one-time cost ~$0.40)")
+                st.stop()
+
+            st.success("✅ Running against cached responses - **Zero API costs!**")
+
+            # Map grader type to test cases
+            grader_map = {
+                "Exact Match & Regex (Cached)": ("rag", CodeGraderTestSuite.get_rag_test_cases()),
+                "Numerical Validation (Cached)": ("numerical", CodeGraderTestSuite.get_numerical_validation_test_cases()),
+                "Consistency Checking (Cached)": ("consistency", CodeGraderTestSuite.get_consistency_check_test_cases()),
+                "Fuzzy String Matching (Cached)": ("fuzzy", CodeGraderTestSuite.get_fuzzy_match_test_cases())
+            }
+
+            mode_key, test_cases = grader_map[grader_type]
+
+            st.subheader(grader_type.replace(" (Cached)", ""))
+            st.markdown(f"**Available Test Cases ({len(test_cases)})**")
+
+            # Build selection table
+            import pandas as pd
+            table_data = []
+            for tc in test_cases:
+                row = {
+                    "Select": True,
+                    "ID": tc["id"],
+                    "Query": tc["query"][:60] + "..." if len(tc["query"]) > 60 else tc["query"],
+                    "Category": tc.get("category", "other")
+                }
+                # Add type-specific columns
+                if "expected_value" in tc:
+                    row["Expected"] = str(tc["expected_value"])
+                if "grader_type" in tc:
+                    row["Type"] = tc["grader_type"]
+                table_data.append(row)
+
+            df = pd.DataFrame(table_data)
+
+            # Editable dataframe for selection
+            edited_df = st.data_editor(
+                df,
+                column_config={
+                    "Select": st.column_config.CheckboxColumn("Select", default=True)
+                },
+                disabled=[col for col in df.columns if col != "Select"],
+                hide_index=True,
+                use_container_width=True,
+                key=f"{mode_key}_grader_table"
+            )
+
+            # Run evaluation button
+            selected_count = edited_df["Select"].sum()
+            st.markdown(f"**Selected: {selected_count} test cases**")
+
+            if st.button(f"🚀 Run {grader_type.split('(')[0].strip()}", type="primary", disabled=selected_count == 0):
+                results = []
+                progress_bar = st.progress(0)
+                status_text = st.empty()
+
+                selected_indices = edited_df[edited_df["Select"]].index.tolist()
+
+                for i, idx in enumerate(selected_indices):
+                    test_case = test_cases[idx]
+                    status_text.text(f"Running test {i+1}/{len(selected_indices)}: {test_case['id']}")
+
+                    # Get cached response
+                    cached_response = cache_manager.get_cached_response(test_case["query"])
+
+                    if cached_response:
+                        # Grade using cached response
+                        grade_result = CodeBasedGraders.run_rag_test(cached_response, test_case)
+                        grade_result["rag_answer"] = cached_response[:200] + "..." if len(cached_response) > 200 else cached_response
+                        grade_result["from_cache"] = True
+                        results.append(grade_result)
+                    else:
+                        # Cache miss
+                        results.append({
+                            "test_id": test_case["id"],
+                            "passed": False,
+                            "score": 0,
+                            "details": f"No cached response found for query",
+                            "rag_answer": "",
+                            "from_cache": False
+                        })
+
+                    progress_bar.progress((i + 1) / len(selected_indices))
+
+                status_text.text("Evaluation complete!")
+                st.session_state.code_grader_results = {
+                    "mode": grader_type.split("(")[0].strip(),
+                    "results": results,
+                    "summary": CodeBasedGraders.calculate_summary(results),
+                    "timestamp": pd.Timestamp.now().strftime("%Y-%m-%d %H:%M:%S")
+                }
+                st.rerun()
+
+            # Display results
+            grader_display_name = grader_type.split("(")[0].strip()
+            if st.session_state.code_grader_results and st.session_state.code_grader_results.get("mode") == grader_display_name:
+                st.divider()
+                st.subheader("Results")
+
+                results_data = st.session_state.code_grader_results
+                summary = results_data["summary"]
+
+                # Summary metrics
+                col1, col2, col3, col4 = st.columns(4)
+                with col1:
+                    st.metric("Total Tests", summary["total_tests"])
+                with col2:
+                    st.metric("Passed", summary["passed"])
+                with col3:
+                    st.metric("Failed", summary["failed"])
+                with col4:
+                    st.metric("Pass Rate", f"{summary['pass_rate']:.1f}%")
+
+                # Detailed results
+                st.markdown("**Detailed Results**")
+                results_table = []
+                for r in results_data["results"]:
+                    results_table.append({
+                        "Test ID": r.get("test_id", ""),
+                        "Status": "✅ PASS" if r.get("passed") else "❌ FAIL",
+                        "Details": r.get("details", "")[:60],
+                        "From Cache": "✅" if r.get("from_cache", False) else "❌"
+                    })
+
+                st.dataframe(pd.DataFrame(results_table), use_container_width=True, hide_index=True)
+
+                # Show failure analysis if any tests failed
+                failed_results = [r for r in results_data["results"] if not r.get("passed")]
+                if failed_results:
+                    st.divider()
+                    st.markdown("### ❌ Failure Analysis & Improvement Suggestions")
+
+                    for r in failed_results:
+                        test_id = r.get('test_id', 'Unknown')
+                        grader_type_check = r.get('grader_type', grader_display_name.lower())
+
+                        with st.expander(f"🔍 {test_id} - {r.get('details', 'No details')[:50]}...", expanded=True):
+                            st.markdown("**Why it failed:**")
+                            st.error(r.get('details', 'Test did not pass validation criteria'))
+
+                            st.markdown("**What to improve:**")
+
+                            # Fact Checking suggestions
+                            if 'exact_match' in grader_type_check or 'Fact Checking' in grader_display_name or 'Exact Match' in grader_display_name:
+                                st.info("""
+**Improve RAG Response Quality:**
+• Ensure document is properly indexed with all sections
+• Check if the expected value exists in source document
+• Verify retrieval is finding relevant chunks (increase k parameter if needed)
+• Review agent prompts to ensure they include specific details in responses
+
+**For missing IDs/names:**
+• Make sure entities are extracted during indexing
+• Check if document metadata includes these fields
+                                """)
+
+                            # Numerical validation suggestions
+                            elif 'numerical' in grader_type_check or 'Numerical' in grader_display_name:
+                                st.info("""
+**Fix Numerical Accuracy:**
+• Verify calculations in RAG response match source document
+• Check for rounding errors (response uses different precision)
+• Ensure currency symbols and formatting are consistent
+• Review if response is pulling from correct document section
+
+**Common issues:**
+• Response rounds $23,370.80 to $23,371
+• Missing decimal places in percentages (0.14 vs 0.14%)
+• Summing wrong values or using stale data
+                                """)
+
+                            # Consistency checking suggestions
+                            elif 'consistency' in grader_type_check or 'Consistency' in grader_display_name:
+                                if 'chronological' in r.get('check_type', '').lower():
+                                    st.info("""
+**Fix Chronological Order Issues:**
+• Update agent prompts to present events in chronological order
+• Sort timeline events by date before generating response
+• Use phrases like "First... Then... Finally..." to guide order
+• Review MapReduce summarization to maintain temporal sequence
+
+**Example fix:** Change prompt to include "Present all dates in chronological order, starting with the earliest event."
+                                    """)
+                                elif 'sum_constraint' in r.get('check_type', '').lower():
+                                    st.info("""
+**Fix Sum Constraint Issues:**
+• Verify component costs add up correctly
+• Remove duplicate totals from response (initial estimate vs final total)
+• Clearly label which values are components vs totals
+• Use table format to separate line items from totals
+
+**Example:** Instead of listing all estimates, only show final breakdown with clear "Total: $X" at end
+                                    """)
+                                elif 'name_consistency' in r.get('check_type', '').lower():
+                                    st.info("""
+**Fix Name Consistency Issues:**
+• Use full name consistently throughout response (not first/last name only)
+• Configure NER (Named Entity Recognition) to standardize names
+• Add prompt instruction: "Always use the full name [Name] when referring to this person"
+• Check if document has name variations and standardize during indexing
+                                    """)
+
+                            # Fuzzy match suggestions
+                            elif 'fuzzy' in grader_type_check or 'Fuzzy' in grader_display_name:
+                                st.info("""
+**Improve Name/String Matching:**
+• Check if name is spelled correctly in source document
+• Verify RAG response includes the expected entity
+• Lower similarity threshold if using abbreviations (e.g., "Dr. Kim" vs "Dr. Rachel Kim")
+• Add name variations to expected values
+
+**Common issues:**
+• Response uses initials: "S. Mitchell" instead of "Sarah Mitchell"
+• Missing titles: "Kim" instead of "Dr. Kim"
+• Typos or OCR errors in source document
+                                """)
+
+                            # General suggestions
+                            else:
+                                st.info("""
+**General Improvement Steps:**
+1. **Verify Source Data:** Check if expected value exists in source document
+2. **Review Retrieval:** Increase retrieval k parameter or check chunk sizes
+3. **Improve Prompts:** Add specific instructions for including required information
+4. **Test Queries:** Try similar queries to see if issue is consistent
+5. **Check Indexing:** Re-index document if recently updated
+                                """)
+
+                            # Show RAG response excerpt if available
+                            if 'rag_answer' in r and r['rag_answer']:
+                                st.markdown("**RAG Response Excerpt:**")
+                                st.code(r['rag_answer'][:300] + "..." if len(r['rag_answer']) > 300 else r['rag_answer'])
+
+                # Export button
+                csv_data = pd.DataFrame(results_table).to_csv(index=False)
+                st.download_button(
+                    "📥 Export Results (CSV)",
+                    csv_data,
+                    f"code_grader_{mode_key}_results_{results_data['timestamp'].replace(' ', '_').replace(':', '-')}.csv",
                     "text/csv"
                 )
 
@@ -2949,30 +2802,49 @@ else:
         # Initialize tracker
         code_tracker = RegressionTracker()
 
-        # Map grader_type (radio selection) to evaluation type
-        grader_type_to_eval = {
-            "Exact Match & Regex": "code_graders_rag_response_grading",
-            "Numerical Validation": "code_graders_numerical_validation",
-            "Consistency Checking": "code_graders_consistency_checking",
-            "Key Fact Coverage": "code_graders_key_fact_coverage",
-            "Fuzzy String Matching": "code_graders_fuzzy_string_matching",
-            "Standalone Regex Validation": "code_graders_standalone_regex_validation"
+        # Map grader selection to evaluation type
+        grader_type_map = {
+            "Standalone Regex Validation (Always Free)": {
+                "eval_type": "code_graders_standalone_regex_validation",
+                "subtype": "standalone_regex_validation",
+                "display": "Regex Pattern Validation"
+            },
+            "Exact Match & Regex (Cached)": {
+                "eval_type": "code_graders_exact_match_regex",
+                "subtype": "exact_match_regex",
+                "display": "Fact Checking & Exact Match"
+            },
+            "Numerical Validation (Cached)": {
+                "eval_type": "code_graders_numerical_validation",
+                "subtype": "numerical_validation",
+                "display": "Numerical Validation"
+            },
+            "Consistency Checking (Cached)": {
+                "eval_type": "code_graders_consistency_checking",
+                "subtype": "consistency_checking",
+                "display": "Consistency Checking"
+            },
+            "Fuzzy String Matching (Cached)": {
+                "eval_type": "code_graders_fuzzy_string_matching",
+                "subtype": "fuzzy_string_matching",
+                "display": "Fuzzy String Matching"
+            }
         }
 
-        # Use the currently selected grader type (not from results)
-        eval_type = grader_type_to_eval.get(grader_type, "code_graders_unknown")
-        grader_subtype = eval_type.replace("code_graders_", "")
+        # Get current grader config
+        grader_config = grader_type_map.get(grader_type, grader_type_map["Standalone Regex Validation (Always Free)"])
+        eval_type = grader_config["eval_type"]
+        grader_subtype = grader_config["subtype"]
+        grader_display = grader_config["display"]
 
-        # Get baseline for the CURRENTLY SELECTED grader type
+        # Get baseline
         code_baseline = code_tracker.get_baseline(eval_type)
 
-        # Check if we have results that match the currently selected grader type
+        # Check if we have results
         results_match_selected = False
         if st.session_state.code_grader_results:
             results_mode = st.session_state.code_grader_results.get("mode", "")
-            # Map results mode to eval_type for comparison
-            results_eval_type = f"code_graders_{results_mode.lower().replace(' ', '_').replace('&', 'and')}"
-            results_match_selected = (results_eval_type == eval_type)
+            results_match_selected = (results_mode == grader_display)
 
         # Baseline Management Panel - always show for the selected grader type
         col1, col2, col3 = st.columns([2, 1, 1])
@@ -2981,9 +2853,9 @@ else:
             if code_baseline:
                 baseline_pass_rate = code_baseline.aggregate_scores.get("pass_rate", 0) * 100
                 st.success(f"**Active Baseline:** {code_baseline.created_at[:16]}")
-                st.caption(f"Type: {grader_type} | Pass Rate: {baseline_pass_rate:.1f}% | {code_baseline.description or 'No description'}")
+                st.caption(f"Type: {grader_display} | Pass Rate: {baseline_pass_rate:.1f}% | {code_baseline.description or 'No description'}")
             else:
-                st.info(f"No baseline set for {grader_type}. Run tests and set as baseline to track regressions.")
+                st.info(f"No baseline set for {grader_display}. Run tests and set as baseline to track regressions.")
 
         with col2:
             baseline_desc_code = st.text_input("Description:", key=f"baseline_desc_{grader_subtype}",
