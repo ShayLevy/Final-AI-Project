@@ -2401,6 +2401,20 @@ else:
         if explanation:
             st.info(f"{explanation['icon']} **{explanation['title']}**: {explanation['description']}")
 
+        # Save short name for regression tracking (before conversion)
+        grader_type_short = grader_type
+
+        # Map short name to display name (used for storing results mode)
+        grader_display_name_map = {
+            "Regex Patterns": "Regex Pattern Validation",
+            "Fact Checking": "Fact Checking",
+            "Numerical": "Numerical",
+            "Consistency": "Consistency",
+            "Fuzzy Match": "Fuzzy Match"
+        }
+        grader_display_name = grader_display_name_map.get(grader_type_short, grader_type_short)
+
+        # Convert to full name for internal use (test case lookup)
         grader_type = grader_name_map.get(grader_type, grader_type)
 
         st.divider()
@@ -2459,7 +2473,7 @@ else:
                     results.append(result)
 
                 st.session_state.code_grader_results = {
-                    "mode": "Standalone Regex Validation",
+                    "mode": "Regex Pattern Validation",
                     "results": results,
                     "summary": CodeBasedGraders.calculate_summary(results),
                     "timestamp": pd.Timestamp.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -2467,7 +2481,7 @@ else:
                 st.rerun()
 
             # Display results
-            if st.session_state.code_grader_results and st.session_state.code_grader_results.get("mode") == "Standalone Regex Validation":
+            if st.session_state.code_grader_results and st.session_state.code_grader_results.get("mode") == "Regex Pattern Validation":
                 st.divider()
                 st.subheader("Results")
 
@@ -2636,7 +2650,7 @@ else:
 
                 status_text.text("Evaluation complete!")
                 st.session_state.code_grader_results = {
-                    "mode": grader_type.split("(")[0].strip(),
+                    "mode": grader_display_name,
                     "results": results,
                     "summary": CodeBasedGraders.calculate_summary(results),
                     "timestamp": pd.Timestamp.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -2644,7 +2658,6 @@ else:
                 st.rerun()
 
             # Display results
-            grader_display_name = grader_type.split("(")[0].strip()
             if st.session_state.code_grader_results and st.session_state.code_grader_results.get("mode") == grader_display_name:
                 st.divider()
                 st.subheader("Results")
@@ -2802,37 +2815,37 @@ else:
         # Initialize tracker
         code_tracker = RegressionTracker()
 
-        # Map grader selection to evaluation type
+        # Map grader selection to evaluation type (using short names from radio buttons)
         grader_type_map = {
-            "Standalone Regex Validation (Always Free)": {
+            "Regex Patterns": {
                 "eval_type": "code_graders_standalone_regex_validation",
                 "subtype": "standalone_regex_validation",
                 "display": "Regex Pattern Validation"
             },
-            "Exact Match & Regex (Cached)": {
+            "Fact Checking": {
                 "eval_type": "code_graders_exact_match_regex",
                 "subtype": "exact_match_regex",
-                "display": "Fact Checking & Exact Match"
+                "display": "Fact Checking"
             },
-            "Numerical Validation (Cached)": {
+            "Numerical": {
                 "eval_type": "code_graders_numerical_validation",
                 "subtype": "numerical_validation",
-                "display": "Numerical Validation"
+                "display": "Numerical"
             },
-            "Consistency Checking (Cached)": {
+            "Consistency": {
                 "eval_type": "code_graders_consistency_checking",
                 "subtype": "consistency_checking",
-                "display": "Consistency Checking"
+                "display": "Consistency"
             },
-            "Fuzzy String Matching (Cached)": {
+            "Fuzzy Match": {
                 "eval_type": "code_graders_fuzzy_string_matching",
                 "subtype": "fuzzy_string_matching",
-                "display": "Fuzzy String Matching"
+                "display": "Fuzzy Match"
             }
         }
 
-        # Get current grader config
-        grader_config = grader_type_map.get(grader_type, grader_type_map["Standalone Regex Validation (Always Free)"])
+        # Get current grader config (using short name)
+        grader_config = grader_type_map.get(grader_type_short, grader_type_map["Regex Patterns"])
         eval_type = grader_config["eval_type"]
         grader_subtype = grader_config["subtype"]
         grader_display = grader_config["display"]
