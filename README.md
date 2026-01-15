@@ -59,7 +59,8 @@ This project implements a production-grade insurance claim retrieval system usin
 ✅ Route queries intelligently to appropriate retrieval strategies \
 ✅ Evaluate system performance objectively using separate judge model \
 ✅ Deterministic code-based graders for fast, reproducible evaluation \
-✅ Regression tracking with baseline comparison and trend visualization
+✅ Regression tracking with baseline comparison and trend visualization \
+✅ Persistent result caching for 90%+ cost reduction during development
 
 
 ### Educational Value
@@ -151,10 +152,11 @@ flowchart TD
 | Agent Orchestration | LangChain | Multi-agent coordination, tool calling |
 | Vector Store | ChromaDB | Persistent vector embeddings storage |
 | Embeddings | OpenAI (text-embedding-3-small) | Text vectorization |
-| LLM (Generation) | OpenAI GPT-4 | Query processing, summarization |
-| LLM (Evaluation) | Anthropic Claude Sonnet | Independent judge model |
+| LLM (Generation) | OpenAI GPT-4o-mini | Query processing, summarization |
+| LLM (Evaluation) | Anthropic Claude Haiku | Independent judge model |
 | RAG Evaluation | RAGAS | Faithfulness, relevancy, precision, recall metrics |
 | Data Validation | Pydantic | Schema validation |
+| Result Caching | JSON (disk) | Persistent evaluation cache |
 
 ---
 
@@ -702,6 +704,43 @@ Using the same model for both generation and evaluation creates **evaluation bia
 1. **Self-Preference Bias**: Models tend to rate their own outputs more favorably
 2. **Style Matching**: The judge may reward outputs that match its own generation patterns
 3. **Blind Spots**: Shared weaknesses won't be caught
+
+### Evaluation Result Caching
+
+To reduce API costs during iterative testing, the system includes a **persistent cache** for evaluation results:
+
+**Features**:
+- ✅ Automatic caching after each evaluation run
+- ✅ Separate cache files for needle and summary queries
+- ✅ Cache invalidation controls (per-type or full clear)
+- ✅ Cache status display (shows how many queries are cached)
+- ✅ Instant loading of cached results (no API calls)
+
+**Cost Savings**:
+- **First run**: Full evaluation cost (~$0.40-0.50 for 10 queries)
+- **Subsequent runs**: Free (cached results loaded instantly)
+- **Savings**: 90%+ cost reduction for repeated testing
+
+**Cache Structure**:
+```
+./evaluation_cache/
+├── needle_results_cache.json    # Needle query results
+└── summary_results_cache.json   # Summary query results
+```
+
+**Usage** (in Streamlit):
+1. Enable cache checkbox (enabled by default)
+2. View cache status: "💾 Cache enabled: 15/20 needle queries cached"
+3. Run evaluation (cached queries skip API calls)
+4. Clear cache when system changes (indexes rebuilt, different model, etc.)
+
+**When to clear cache**:
+- System configuration changed (different model, retrieval settings)
+- Document was updated (new information)
+- Indexes were rebuilt
+- Need fresh baseline for final evaluation
+
+See [CACHE_GUIDE.md](CACHE_GUIDE.md) for detailed documentation.
 
 ### JSON Response Handling
 
@@ -1256,13 +1295,24 @@ The 10 test queries are split evenly between Summary and Needle types:
 
 ### Cost Analysis
 
-**Per-Query Cost**:
-- Generation (GPT-4): ~$0.02-0.03
-- Evaluation - RAGAS (GPT-4o-mini): ~$0.01
-- Evaluation - LLM-as-a-Judge (Claude): ~$0.02
-- **Total**: ~$0.04-0.05 per query-evaluation pair
+**Per-Query Cost** (with GPT-4o-mini and Claude Haiku):
+- Generation (GPT-4o-mini): ~$0.001-0.002 (200x cheaper than GPT-4)
+- Evaluation - RAGAS (GPT-4o-mini): ~$0.001
+- Evaluation - LLM-as-a-Judge (Claude Haiku): ~$0.002 (12x cheaper than Claude Sonnet 4)
+- **Total**: ~$0.004-0.005 per query-evaluation pair
 
-**Full Evaluation (10 queries)**: ~$0.40-0.50
+**Full Evaluation (20 queries)**:
+- First run: ~$0.08-0.10 (full evaluation)
+- Cached runs: $0.00 (cached results, no API calls)
+- **Cost reduction: 99% vs GPT-4 + Claude Sonnet 4**
+- **With cache: 90%+ additional savings on repeated testing**
+
+**Model Switching**:
+- Development: Use GPT-4o-mini + Haiku (cheap, fast iteration)
+- Final evaluation: Switch to GPT-4 + Sonnet 4 for accuracy
+- Use `switch_to_gpt4.py` script for easy model switching
+
+See [COST_REDUCTION_GUIDE.md](COST_REDUCTION_GUIDE.md) for detailed cost optimization strategies.
 
 ---
 
@@ -1276,7 +1326,7 @@ The 10 test queries are split evenly between Summary and Needle types:
 
 3. **English Only**: No multilingual support
 
-4. **Cost**: GPT-4 is expensive for production ($0.06/query)
+4. **Cost**: Production deployment requires cost monitoring (mitigated by GPT-4o-mini and caching)
 
 5. **Hallucination Risk**: Still possible despite retrieval grounding
 
@@ -1312,15 +1362,13 @@ The 10 test queries are split evenly between Summary and Needle types:
 
 5. **Hybrid Search**: Add BM25 keyword search alongside vector search
 
-6. **Caching**: Cache common queries to reduce cost
+6. **Model Alternatives**: Test additional models like Gemini, open-source models
 
-7. **Model Alternatives**: Test Anthropic Claude, open-source models
+7. **Real-Time Updates**: Implement incremental indexing
 
-8. **Real-Time Updates**: Implement incremental indexing
+8. **Explainability**: Show why each chunk was retrieved (attention scores)
 
-9. **Explainability**: Show why each chunk was retrieved (attention scores)
-
-10. **Multi-Modal**: Add support for images (damage photos, documents)
+9. **Multi-Modal**: Add support for images (damage photos, documents)
 
 ---
 

@@ -733,6 +733,785 @@ class CodeBasedGraders:
                         else f"(< {similarity_threshold*100}% threshold - FAIL)")
         }
 
+    # ==========================================
+    # NEW CODE-BASED GRADERS WITH PARTIAL CREDIT
+    # ==========================================
+
+    @staticmethod
+    def multi_fact_extraction_grade(
+        answer: str,
+        required_facts: List[Dict[str, Any]],
+        scoring_mode: str = "partial"
+    ) -> Dict[str, Any]:
+        """
+        Extract multiple facts and award partial credit based on weighted components.
+
+        Args:
+            answer: The text to search in
+            required_facts: List of facts with patterns and weights
+                Example: [
+                    {"fact": "incident_date", "pattern": r"January 12, 2024", "weight": 1.0},
+                    {"fact": "location", "pattern": r"Wilshire.*Vermont", "weight": 1.5},
+                ]
+            scoring_mode: "partial" for weighted scoring, "binary" for all-or-nothing
+
+        Returns:
+            Dict with partial credit score, found/missing facts, and details
+        """
+        if not required_facts:
+            return {
+                "passed": False,
+                "score": 0.0,
+                "facts_found": [],
+                "facts_missing": [],
+                "details": "No facts specified"
+            }
+
+        facts_found = []
+        facts_missing = []
+        total_weight = sum(fact.get("weight", 1.0) for fact in required_facts)
+        found_weight = 0.0
+
+        for fact in required_facts:
+            fact_name = fact.get("fact", "unknown")
+            pattern = fact.get("pattern", "")
+            weight = fact.get("weight", 1.0)
+
+            if re.search(pattern, answer, re.IGNORECASE):
+                facts_found.append(fact_name)
+                found_weight += weight
+            else:
+                facts_missing.append(fact_name)
+
+        if scoring_mode == "binary":
+            score = 1.0 if len(facts_missing) == 0 else 0.0
+        else:  # partial
+            score = found_weight / total_weight if total_weight > 0 else 0.0
+
+        passed = score >= 0.7  # 70% threshold for passing
+
+        return {
+            "passed": passed,
+            "score": round(score, 3),
+            "facts_found": facts_found,
+            "facts_missing": facts_missing,
+            "found_weight": round(found_weight, 2),
+            "total_weight": round(total_weight, 2),
+            "scoring_mode": scoring_mode,
+            "details": f"Found {len(facts_found)}/{len(required_facts)} facts " +
+                      f"(weighted score: {score*100:.1f}%)"
+        }
+
+    @staticmethod
+    def tool_usage_correctness_grade(
+        query: str,
+        answer: str,
+        expected_outcome: Dict[str, Any],
+        tool_trace: Optional[List[Dict]] = None
+    ) -> Dict[str, Any]:
+        """
+        Verify correct outcome achieved regardless of tool path taken.
+        Evaluates outcomes, not processes (Anthropic best practice).
+
+        Args:
+            query: The original query
+            answer: The agent's answer
+            expected_outcome: Expected outcome specification
+                Example: {"days_calculated": True, "value": 3, "tolerance": 0}
+            tool_trace: Optional list of tools called
+
+        Returns:
+            Dict with outcome verification results
+        """
+        outcome_type = expected_outcome.get("type", "value_present")
+        expected_value = expected_outcome.get("value")
+        tolerance = expected_outcome.get("tolerance", 0)
+
+        outcome_achieved = False
+
+        if outcome_type == "value_present":
+            # Check if expected value appears in answer
+            if isinstance(expected_value, (int, float)):
+                # Look for numerical value with tolerance
+                pattern = r'\d+(?:\.\d+)?'
+                matches = re.findall(pattern, answer)
+                for match in matches:
+                    if abs(float(match) - expected_value) <= tolerance:
+                        outcome_achieved = True
+                        break
+            else:
+                # String value
+                outcome_achieved = str(expected_value).lower() in answer.lower()
+
+        tool_path = [t.get("tool", "unknown") for t in (tool_trace or [])]
+
+        return {
+            "passed": outcome_achieved,
+            "score": 1.0 if outcome_achieved else 0.0,
+            "outcome_achieved": outcome_achieved,
+            "expected_outcome": expected_outcome,
+            "tool_path": tool_path,
+            "details": f"Outcome {'achieved' if outcome_achieved else 'not achieved'} " +
+                      f"via tools: {tool_path}" if tool_path else "Outcome verification only"
+        }
+
+    @staticmethod
+    def timeline_ordering_grade(
+        answer: str,
+        expected_events: List[Dict[str, Any]]
+    ) -> Dict[str, Any]:
+        """
+        Verify logical chronological ordering with causal constraints.
+        Exploitation-resistant: checks logical ordering, not just memorization.
+
+        Args:
+            answer: The text containing timeline
+            expected_events: List of events with ordering constraints
+                Example: [
+                    {"event": "incident", "pattern": r"January 12", "must_be_before": ["claim_filed"]},
+                    {"event": "claim_filed", "pattern": r"January 15", "must_be_after": ["incident"]}
+                ]
+
+        Returns:
+            Dict with ordering verification results
+        """
+        # Extract positions of all events
+        event_positions = {}
+        for event_spec in expected_events:
+            event_name = event_spec.get("event")
+            pattern = event_spec.get("pattern")
+            match = re.search(pattern, answer, re.IGNORECASE)
+            if match:
+                event_positions[event_name] = match.start()
+
+        # Check ordering constraints
+        ordering_violations = []
+        for event_spec in expected_events:
+            event_name = event_spec.get("event")
+            must_be_before = event_spec.get("must_be_before", [])
+            must_be_after = event_spec.get("must_be_after", [])
+
+            if event_name not in event_positions:
+                ordering_violations.append({
+                    "event": event_name,
+                    "violation": "event not found in answer"
+                })
+                continue
+
+            event_pos = event_positions[event_name]
+
+            # Check must_be_before constraints
+            for other_event in must_be_before:
+                if other_event in event_positions:
+                    if event_pos >= event_positions[other_event]:
+                        ordering_violations.append({
+                            "event": event_name,
+                            "violation": f"{event_name} should be before {other_event}"
+                        })
+
+            # Check must_be_after constraints
+            for other_event in must_be_after:
+                if other_event in event_positions:
+                    if event_pos <= event_positions[other_event]:
+                        ordering_violations.append({
+                            "event": event_name,
+                            "violation": f"{event_name} should be after {other_event}"
+                        })
+
+        passed = len(ordering_violations) == 0
+
+        return {
+            "passed": passed,
+            "score": 1.0 if passed else 0.0,
+            "events_found": len(event_positions),
+            "total_events": len(expected_events),
+            "ordering_violations": ordering_violations,
+            "details": f"Found {len(event_positions)}/{len(expected_events)} events, " +
+                      f"{len(ordering_violations)} ordering violations"
+        }
+
+    @staticmethod
+    def financial_constraint_grade(
+        answer: str,
+        constraints: List[Dict[str, Any]]
+    ) -> Dict[str, Any]:
+        """
+        Verify complex financial relationships with partial credit.
+
+        Args:
+            answer: The text containing financial information
+            constraints: List of financial constraints to verify
+                Example: [
+                    {"type": "sum", "components": [17111.83, 750], "equals": 17861.83, "tolerance": 0.01},
+                    {"type": "range", "value_pattern": r"\$?750", "min": 500, "max": 1000}
+                ]
+
+        Returns:
+            Dict with constraint verification and partial credit
+        """
+        constraints_satisfied = []
+        constraints_violated = []
+
+        # Extract all currency values from answer
+        currency_pattern = r'\$?[\d,]+\.?\d*'
+        raw_values = re.findall(currency_pattern, answer)
+        values = []
+        for v in raw_values:
+            cleaned = v.replace('$', '').replace(',', '').strip()
+            if cleaned and cleaned != '.':
+                try:
+                    values.append(float(cleaned))
+                except ValueError:
+                    continue
+
+        for constraint in constraints:
+            constraint_type = constraint.get("type")
+
+            if constraint_type == "sum":
+                components = constraint.get("components", [])
+                expected_sum = constraint.get("equals")
+                tolerance = constraint.get("tolerance", 0.01)
+
+                # Check if sum relationship appears
+                actual_sum = sum(components)
+                if any(abs(v - expected_sum) <= tolerance for v in values):
+                    constraints_satisfied.append(constraint)
+                else:
+                    constraints_violated.append({
+                        "constraint": constraint,
+                        "reason": f"Expected sum {expected_sum} not found"
+                    })
+
+            elif constraint_type == "range":
+                value_pattern = constraint.get("value_pattern")
+                min_val = constraint.get("min", 0)
+                max_val = constraint.get("max", float('inf'))
+
+                matches = re.findall(value_pattern, answer)
+                if matches:
+                    value = float(matches[0].replace('$', '').replace(',', ''))
+                    if min_val <= value <= max_val:
+                        constraints_satisfied.append(constraint)
+                    else:
+                        constraints_violated.append({
+                            "constraint": constraint,
+                            "reason": f"Value {value} outside range [{min_val}, {max_val}]"
+                        })
+                else:
+                    constraints_violated.append({
+                        "constraint": constraint,
+                        "reason": "Value pattern not found"
+                    })
+
+        # Partial credit score
+        total_constraints = len(constraints)
+        satisfied_count = len(constraints_satisfied)
+        score = satisfied_count / total_constraints if total_constraints > 0 else 0.0
+        passed = score >= 0.7
+
+        return {
+            "passed": passed,
+            "score": round(score, 3),
+            "constraints_satisfied": satisfied_count,
+            "constraints_violated": len(constraints_violated),
+            "total_constraints": total_constraints,
+            "violations": constraints_violated,
+            "details": f"{satisfied_count}/{total_constraints} constraints satisfied ({score*100:.1f}%)"
+        }
+
+    @staticmethod
+    def entity_relationship_grade(
+        answer: str,
+        relationships: List[Dict[str, Any]]
+    ) -> Dict[str, Any]:
+        """
+        Verify understanding of entity relationships with partial credit.
+        Exploitation-resistant: checks relationship understanding, not memorization.
+
+        Args:
+            answer: The text containing entity relationships
+            relationships: List of expected relationships
+                Example: [
+                    {"subject": "Sarah Mitchell", "relation": "policyholder_of", "object": "CLM-2024-001"},
+                    {"subject": "Robert Harrison", "relation": "at_fault_in", "object": "CLM-2024-001"}
+                ]
+
+        Returns:
+            Dict with relationship verification and partial credit
+        """
+        relationships_correct = []
+        relationships_incorrect = []
+
+        for rel in relationships:
+            subject = rel.get("subject", "")
+            relation_type = rel.get("relation", "")
+            obj = rel.get("object", "")
+
+            # Check if both entities are mentioned
+            subject_found = subject.lower() in answer.lower()
+            object_found = obj.lower() in answer.lower()
+
+            if not (subject_found and object_found):
+                relationships_incorrect.append({
+                    "relationship": rel,
+                    "reason": f"Missing entity: {'' if subject_found else subject} {'' if object_found else obj}"
+                })
+                continue
+
+            # Define relation keywords based on type
+            relation_keywords = {
+                "policyholder_of": ["policyholder", "policy holder", "insured", "claimant"],
+                "at_fault_in": ["at fault", "at-fault", "liable", "responsible for"],
+                "adjuster_for": ["adjuster", "claims adjuster", "assigned to"],
+                "victim_of": ["victim", "injured in", "involved in"],
+            }
+
+            keywords = relation_keywords.get(relation_type, [relation_type])
+
+            # Check if relationship is stated correctly
+            # Look for subject, then relation keywords, then object within reasonable proximity
+            subject_pos = answer.lower().find(subject.lower())
+            object_pos = answer.lower().find(obj.lower())
+
+            # Extract text between entities
+            if subject_pos < object_pos:
+                between_text = answer[subject_pos:object_pos + len(obj)]
+            else:
+                between_text = answer[object_pos:subject_pos + len(subject)]
+
+            relation_found = any(kw in between_text.lower() for kw in keywords)
+
+            if relation_found:
+                relationships_correct.append(rel)
+            else:
+                relationships_incorrect.append({
+                    "relationship": rel,
+                    "reason": f"Relationship '{relation_type}' not clearly stated"
+                })
+
+        # Partial credit score
+        total = len(relationships)
+        correct = len(relationships_correct)
+        score = correct / total if total > 0 else 0.0
+        passed = score >= 0.7
+
+        return {
+            "passed": passed,
+            "score": round(score, 3),
+            "relationships_correct": correct,
+            "relationships_incorrect": len(relationships_incorrect),
+            "total_relationships": total,
+            "incorrect_details": relationships_incorrect,
+            "details": f"{correct}/{total} relationships correctly stated ({score*100:.1f}%)"
+        }
+
+    @staticmethod
+    def missing_information_detection_grade(
+        query: str,
+        answer: str,
+        info_availability: Dict[str, bool]
+    ) -> Dict[str, Any]:
+        """
+        Verify agent correctly identifies when information is NOT in document.
+        Critical for hallucination prevention.
+
+        Args:
+            query: The original query
+            answer: The agent's answer
+            info_availability: Which information should/shouldn't be available
+                Example: {"weather_mentioned": False, "vehicle_color": False}
+
+        Returns:
+            Dict with hallucination detection results
+        """
+        missing_info_markers = [
+            "not mentioned",
+            "not specified",
+            "not stated",
+            "not available",
+            "not provided",
+            "not included",
+            "no information",
+            "information is not",
+            "does not specify",
+            "doesn't specify",
+        ]
+
+        hallucination_detected = False
+        correctly_identified_missing = False
+
+        # Check if answer correctly identifies missing information
+        answer_lower = answer.lower()
+        has_missing_marker = any(marker in answer_lower for marker in missing_info_markers)
+
+        # Check for each piece of information
+        for info_key, should_be_available in info_availability.items():
+            if not should_be_available:
+                # Information should NOT be in document
+                # Answer should indicate this
+                if has_missing_marker:
+                    correctly_identified_missing = True
+                else:
+                    # Check if answer provides specific information (hallucination)
+                    # This is a heuristic - specific values suggest hallucination
+                    if re.search(r'\b(red|blue|green|clear|sunny|rainy)\b', answer_lower):
+                        hallucination_detected = True
+
+        passed = correctly_identified_missing and not hallucination_detected
+
+        return {
+            "passed": passed,
+            "score": 1.0 if passed else 0.0,
+            "correctly_identified_missing": correctly_identified_missing,
+            "hallucination_detected": hallucination_detected,
+            "has_missing_marker": has_missing_marker,
+            "details": "Correctly identified missing information" if passed else
+                      ("Hallucination detected" if hallucination_detected else
+                       "Did not identify missing information")
+        }
+
+    @staticmethod
+    def cross_section_inference_grade(
+        answer: str,
+        required_sections: List[str],
+        inference_check: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        """
+        Verify synthesis across document sections with partial credit.
+
+        Args:
+            answer: The agent's answer
+            required_sections: Sections that should be synthesized
+            inference_check: Expected inference details
+                Example: {
+                    "section_facts": {"MEDICAL": ["8 PT sessions"], "TIMELINE": ["Feb 16"]},
+                    "correct_inference": "Unable to work during PT",
+                    "inference_pattern": r"unable to work|could not work"
+                }
+
+        Returns:
+            Dict with cross-section synthesis verification and partial credit
+        """
+        section_facts = inference_check.get("section_facts", {})
+        inference_pattern = inference_check.get("inference_pattern", "")
+
+        # Check which section facts are present
+        sections_used = []
+        for section, facts in section_facts.items():
+            section_found = any(fact.lower() in answer.lower() for fact in facts)
+            if section_found:
+                sections_used.append(section)
+
+        # Check if inference is present
+        inference_correct = bool(re.search(inference_pattern, answer, re.IGNORECASE)) if inference_pattern else False
+
+        # Partial credit: 40% for retrieving from sections, 60% for correct inference
+        section_score = len(sections_used) / len(section_facts) if section_facts else 0.0
+        inference_score = 1.0 if inference_correct else 0.0
+
+        total_score = (0.4 * section_score) + (0.6 * inference_score)
+        passed = total_score >= 0.7
+
+        return {
+            "passed": passed,
+            "score": round(total_score, 3),
+            "sections_used": sections_used,
+            "required_sections": list(section_facts.keys()),
+            "inference_correct": inference_correct,
+            "section_score": round(section_score, 3),
+            "inference_score": inference_score,
+            "details": f"Used {len(sections_used)}/{len(section_facts)} sections, " +
+                      f"inference {'correct' if inference_correct else 'incorrect'} " +
+                      f"(total: {total_score*100:.1f}%)"
+        }
+
+    @staticmethod
+    def ambiguity_resolution_grade(
+        query: str,
+        answer: str,
+        expected_behavior: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        """
+        Verify agent handles ambiguous queries correctly.
+        Exploitation-resistant: can't be gamed by memorized Q&A pairs.
+
+        Args:
+            query: The potentially ambiguous query
+            answer: The agent's answer
+            expected_behavior: How agent should handle ambiguity
+                Example: {
+                    "should_clarify": True,
+                    "acceptable_interpretations": ["total_claim", "repair_cost"],
+                    "should_provide_multiple": True
+                }
+
+        Returns:
+            Dict with ambiguity handling verification
+        """
+        should_clarify = expected_behavior.get("should_clarify", False)
+        acceptable_interpretations = expected_behavior.get("acceptable_interpretations", [])
+        should_provide_multiple = expected_behavior.get("should_provide_multiple", False)
+
+        clarification_markers = [
+            "could mean",
+            "might refer to",
+            "could be",
+            "specifically",
+            "to clarify",
+            "breakdown",
+            "includes",
+            "consists of",
+        ]
+
+        has_clarification = any(marker in answer.lower() for marker in clarification_markers)
+
+        # Check how many interpretations are provided
+        interpretations_provided = sum(
+            1 for interp in acceptable_interpretations
+            if interp.replace('_', ' ').lower() in answer.lower()
+        )
+
+        provides_multiple = interpretations_provided >= 2
+
+        # Scoring
+        passed = True
+        if should_clarify and not has_clarification:
+            passed = False
+        if should_provide_multiple and not provides_multiple:
+            passed = False
+
+        return {
+            "passed": passed,
+            "score": 1.0 if passed else 0.0,
+            "has_clarification": has_clarification,
+            "interpretations_provided": interpretations_provided,
+            "provides_multiple": provides_multiple,
+            "details": f"Clarification {'provided' if has_clarification else 'missing'}, " +
+                      f"{interpretations_provided} interpretations given"
+        }
+
+    @staticmethod
+    def date_arithmetic_grade(
+        query: str,
+        answer: str,
+        expected_calculation: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        """
+        Verify date calculations are correct with tolerance.
+        Outcome-based: correct calculation regardless of method.
+
+        Args:
+            query: The query requesting date arithmetic
+            answer: The agent's answer
+            expected_calculation: Expected calculation details
+                Example: {
+                    "start_date": "2024-01-29",
+                    "end_date": "2024-02-15",
+                    "expected_days": 17,
+                    "tolerance": 1,
+                    "units": "days"
+                }
+
+        Returns:
+            Dict with date arithmetic verification
+        """
+        expected_value = expected_calculation.get("expected_days")
+        tolerance = expected_calculation.get("tolerance", 1)
+        units = expected_calculation.get("units", "days")
+
+        # Extract numerical values from answer
+        numbers = [int(n) for n in re.findall(r'\b\d+\b', answer)]
+
+        # Check if any number is within tolerance of expected value
+        within_tolerance = any(
+            abs(num - expected_value) <= tolerance
+            for num in numbers
+        )
+
+        # Also check for approximate descriptions
+        if units == "days":
+            weeks = expected_value / 7
+            if 2 <= weeks <= 4:
+                week_pattern = rf'\b{int(round(weeks))}\s*weeks?\b'
+                if re.search(week_pattern, answer, re.IGNORECASE):
+                    within_tolerance = True
+
+        return {
+            "passed": within_tolerance,
+            "score": 1.0 if within_tolerance else 0.0,
+            "expected_value": expected_value,
+            "tolerance": tolerance,
+            "values_found": numbers,
+            "within_tolerance": within_tolerance,
+            "details": f"Expected {expected_value}±{tolerance} {units}, " +
+                      f"found values: {numbers}"
+        }
+
+    @staticmethod
+    def confidence_calibration_grade(
+        query: str,
+        answer: str,
+        expected_confidence: str
+    ) -> Dict[str, Any]:
+        """
+        Verify appropriate uncertainty expression.
+        Prevents overconfident hallucinations.
+
+        Args:
+            query: The original query
+            answer: The agent's answer
+            expected_confidence: Expected confidence level ("high", "medium", "low")
+
+        Returns:
+            Dict with confidence calibration verification
+        """
+        high_confidence_markers = [
+            "is", "was", "are", "the exact", "specifically", "precisely"
+        ]
+        hedging_markers = [
+            "appears to be", "seems to be", "might be", "could be",
+            "approximately", "around", "about", "roughly",
+            "not specified", "not mentioned", "unclear"
+        ]
+
+        answer_lower = answer.lower()
+
+        has_hedging = any(marker in answer_lower for marker in hedging_markers)
+        has_high_confidence = any(marker in answer_lower for marker in high_confidence_markers)
+
+        # Determine expressed confidence
+        if has_hedging and not has_high_confidence:
+            expressed_confidence = "low"
+        elif has_high_confidence and not has_hedging:
+            expressed_confidence = "high"
+        else:
+            expressed_confidence = "medium"
+
+        calibration_correct = (expressed_confidence == expected_confidence)
+
+        return {
+            "passed": calibration_correct,
+            "score": 1.0 if calibration_correct else 0.0,
+            "expressed_confidence": expressed_confidence,
+            "expected_confidence": expected_confidence,
+            "has_hedging": has_hedging,
+            "calibration_correct": calibration_correct,
+            "details": f"Expected {expected_confidence} confidence, " +
+                      f"expressed {expressed_confidence} confidence"
+        }
+
+    @staticmethod
+    def retrieval_coverage_grade(
+        query: str,
+        retrieved_chunks: List[str],
+        required_information: List[Dict[str, Any]]
+    ) -> Dict[str, Any]:
+        """
+        Measure retrieval completeness with partial credit.
+
+        Args:
+            query: The original query
+            retrieved_chunks: List of retrieved text chunks
+            required_information: List of required information pieces
+                Example: [
+                    {"item": "Marcus Thompson", "weight": 1.0},
+                    {"item": "Elena Rodriguez", "weight": 1.0},
+                    {"item": "Patricia O'Brien", "weight": 1.0}
+                ]
+
+        Returns:
+            Dict with retrieval coverage and partial credit
+        """
+        combined_chunks = " ".join(retrieved_chunks)
+
+        retrieved_items = []
+        missing_items = []
+        total_weight = sum(item.get("weight", 1.0) for item in required_information)
+        retrieved_weight = 0.0
+
+        for item_spec in required_information:
+            item_name = item_spec.get("item", "")
+            weight = item_spec.get("weight", 1.0)
+
+            if item_name.lower() in combined_chunks.lower():
+                retrieved_items.append(item_name)
+                retrieved_weight += weight
+            else:
+                missing_items.append(item_name)
+
+        score = retrieved_weight / total_weight if total_weight > 0 else 0.0
+        passed = score >= 0.8  # 80% threshold
+
+        return {
+            "passed": passed,
+            "score": round(score, 3),
+            "retrieved_items": len(retrieved_items),
+            "missing_items": len(missing_items),
+            "total_items": len(required_information),
+            "missing_item_list": missing_items,
+            "retrieved_weight": round(retrieved_weight, 2),
+            "total_weight": round(total_weight, 2),
+            "details": f"Retrieved {len(retrieved_items)}/{len(required_information)} items " +
+                      f"(weighted: {score*100:.1f}%)"
+        }
+
+    @staticmethod
+    def answer_completeness_grade(
+        query: str,
+        answer: str,
+        required_components: List[Dict[str, Any]]
+    ) -> Dict[str, Any]:
+        """
+        Score answer completeness with weighted components and partial credit.
+
+        Args:
+            query: The original query
+            answer: The agent's answer
+            required_components: List of required components
+                Example: [
+                    {"component": "incident_basics", "weight": 2.0, "pattern": r"January 12.*accident"},
+                    {"component": "financial_summary", "weight": 1.5, "pattern": r"\$23,370"}
+                ]
+
+        Returns:
+            Dict with completeness score and partial credit breakdown
+        """
+        components_found = []
+        components_missing = []
+        total_weight = sum(comp.get("weight", 1.0) for comp in required_components)
+        found_weight = 0.0
+
+        for comp_spec in required_components:
+            comp_name = comp_spec.get("component", "unknown")
+            pattern = comp_spec.get("pattern", "")
+            weight = comp_spec.get("weight", 1.0)
+
+            if re.search(pattern, answer, re.IGNORECASE):
+                components_found.append(comp_name)
+                found_weight += weight
+            else:
+                components_missing.append(comp_name)
+
+        score = found_weight / total_weight if total_weight > 0 else 0.0
+        passed = score >= 0.7  # 70% threshold
+
+        return {
+            "passed": passed,
+            "score": round(score, 3),
+            "components_found": components_found,
+            "components_missing": components_missing,
+            "total_components": len(required_components),
+            "found_weight": round(found_weight, 2),
+            "total_weight": round(total_weight, 2),
+            "weighted_coverage": round(score, 3),
+            "details": f"Found {len(components_found)}/{len(required_components)} components " +
+                      f"(weighted: {score*100:.1f}%)"
+        }
+
+    # ==========================================
+    # END NEW GRADERS
+    # ==========================================
+
     @staticmethod
     def run_rag_test(
         answer: str,

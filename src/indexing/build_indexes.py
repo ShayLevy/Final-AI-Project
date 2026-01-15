@@ -30,7 +30,7 @@ class IndexBuilder:
     Builds both Summary and Hierarchical indexes using LlamaIndex with ChromaDB
     """
 
-    def __init__(self, vector_store_manager, llm_model: str = "gpt-4", temperature: float = 0):
+    def __init__(self, vector_store_manager, llm_model: str = "gpt-4o-mini", temperature: float = 0):  # Changed from gpt-4
         """
         Initialize index builder
 

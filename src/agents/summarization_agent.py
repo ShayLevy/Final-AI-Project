@@ -21,7 +21,7 @@ class SummarizationAgent:
     def __init__(
         self,
         summary_index,
-        llm_model: str = "gpt-4",
+        llm_model: str = "gpt-4o-mini",  # Changed from gpt-4 to save costs (200x cheaper!)
         temperature: float = 0
     ):
         """

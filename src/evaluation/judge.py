@@ -29,7 +29,7 @@ class LLMJudge:
     Evaluates: Answer Correctness, Context Relevancy, Context Recall
     """
 
-    def __init__(self, judge_model: str = "claude-sonnet-4-20250514", temperature: float = 0):
+    def __init__(self, judge_model: str = "claude-3-5-haiku-20241022", temperature: float = 0):  # Changed from sonnet-4 to haiku (12x cheaper!)
         """
         Initialize LLM Judge with Anthropic Claude
 
@@ -267,6 +267,505 @@ Evaluate the recall:""")
                 "retrieved_expected": [],
                 "missed_expected": []
             }
+
+    # ==========================================
+    # NEW MODEL-BASED GRADERS (7 Additional)
+    # ==========================================
+
+    def evaluate_faithfulness(
+        self,
+        answer: str,
+        retrieved_context: str
+    ) -> Dict[str, Any]:
+        """
+        Evaluate faithfulness - answer grounded in retrieved context.
+        Separate from correctness: checks if claims are supported by context.
+
+        Args:
+            answer: System's answer
+            retrieved_context: Context retrieved by system
+
+        Returns:
+            Dictionary with score and reasoning
+        """
+        logger.info("Evaluating faithfulness...")
+
+        prompt = ChatPromptTemplate.from_messages([
+            ("system", """You are an evaluation judge. Rate how well the answer is grounded in the retrieved context.
+
+Scoring (1-5):
+5 = All claims fully supported by context, no hallucinations
+4 = Mostly faithful, minor unsupported details (e.g., formatting differences)
+3 = Partially faithful, some claims lack support but core facts correct
+2 = Multiple unsupported claims, context contradicts some statements
+1 = Severe hallucinations, answer conflicts with retrieved context
+
+Consider:
+- Does every factual claim have support in the context?
+- Are there contradictions between answer and context?
+- Are specific values (dates, amounts, names) correctly quoted?
+
+ESCAPE CLAUSE: If context is empty or irrelevant, return score "N/A".
+
+Respond in JSON format:
+{{"score": <1-5 or "N/A">, "reasoning": "<explanation>", "supported_claims": ["claim1"], "unsupported_claims": ["claim2"], "contradictions": []}}"""),
+            ("human", """Retrieved Context:
+{context}
+
+Answer:
+{answer}
+
+Evaluate faithfulness:""")
+        ])
+
+        chain = prompt | self.llm
+        response = chain.invoke({
+            "context": retrieved_context,
+            "answer": answer
+        })
+
+        try:
+            cleaned_response = self._strip_markdown_code_blocks(response.content)
+            result = json.loads(cleaned_response)
+
+            score = result.get("score", 0)
+            escape_clause_triggered = (score == "N/A")
+
+            return {
+                "metric": "faithfulness",
+                "score": score if not escape_clause_triggered else "N/A",
+                "reasoning": result.get("reasoning", ""),
+                "supported_claims": result.get("supported_claims", []),
+                "unsupported_claims": result.get("unsupported_claims", []),
+                "contradictions": result.get("contradictions", []),
+                "escape_clause_triggered": escape_clause_triggered
+            }
+        except json.JSONDecodeError:
+            logger.warning("Failed to parse JSON, extracting score manually")
+            return self._parse_fallback(response.content, "faithfulness")
+
+    def evaluate_helpfulness(
+        self,
+        query: str,
+        answer: str
+    ) -> Dict[str, Any]:
+        """
+        Evaluate helpfulness - answer can be correct but unhelpful.
+        Separate from correctness: focuses on user utility.
+
+        Args:
+            query: Original question
+            answer: System's answer
+
+        Returns:
+            Dictionary with score and reasoning
+        """
+        logger.info("Evaluating helpfulness...")
+
+        prompt = ChatPromptTemplate.from_messages([
+            ("system", """You are an evaluation judge. Rate how helpful the answer is to the user.
+
+Scoring (1-5):
+5 = Comprehensive, directly answers question with context. User needs no follow-up
+4 = Helpful, answers question but could provide more context or examples
+3 = Partially helpful, answers question but misses important nuances
+2 = Minimally helpful, answers question but lacks essential context
+1 = Unhelpful, answer is confusing, incomplete, or requires clarification
+
+Consider:
+- Does answer directly address the question?
+- Is context provided when needed?
+- Is answer actionable/usable?
+- Are important caveats mentioned?
+
+ESCAPE CLAUSE: If answer is factually wrong, return score "N/A" (correctness failure, not helpfulness).
+
+Respond in JSON format:
+{{"score": <1-5 or "N/A">, "reasoning": "<explanation>", "strengths": ["strength1"], "weaknesses": ["weakness1"]}}"""),
+            ("human", """Question: {query}
+
+Answer: {answer}
+
+Evaluate helpfulness:""")
+        ])
+
+        chain = prompt | self.llm
+        response = chain.invoke({
+            "query": query,
+            "answer": answer
+        })
+
+        try:
+            cleaned_response = self._strip_markdown_code_blocks(response.content)
+            result = json.loads(cleaned_response)
+
+            score = result.get("score", 0)
+            escape_clause_triggered = (score == "N/A")
+
+            return {
+                "metric": "helpfulness",
+                "score": score if not escape_clause_triggered else "N/A",
+                "reasoning": result.get("reasoning", ""),
+                "strengths": result.get("strengths", []),
+                "weaknesses": result.get("weaknesses", []),
+                "escape_clause_triggered": escape_clause_triggered
+            }
+        except json.JSONDecodeError:
+            logger.warning("Failed to parse JSON, extracting score manually")
+            return self._parse_fallback(response.content, "helpfulness")
+
+    def evaluate_coherence(
+        self,
+        answer: str
+    ) -> Dict[str, Any]:
+        """
+        Evaluate coherence - logical structure and flow.
+        Separate from correctness: answer can be factually correct but incoherent.
+
+        Args:
+            answer: System's answer
+
+        Returns:
+            Dictionary with score and reasoning
+        """
+        logger.info("Evaluating coherence...")
+
+        prompt = ChatPromptTemplate.from_messages([
+            ("system", """You are an evaluation judge. Rate the logical coherence and structure of the answer.
+
+Scoring (1-5):
+5 = Perfectly structured, logical flow, no contradictions, easy to follow
+4 = Mostly coherent, minor flow issues but understandable
+3 = Partially coherent, some logical gaps or unclear transitions
+2 = Minimally coherent, disjointed information, hard to follow
+1 = Incoherent, contradictory statements, confusing structure
+
+Consider:
+- Is information presented in logical order?
+- Are there internal contradictions?
+- Do sentences flow naturally?
+- Is structure clear (e.g., chronological for timelines)?
+
+IGNORE factual accuracy (graded separately).
+
+Respond in JSON format:
+{{"score": <1-5>, "reasoning": "<explanation>", "structure_quality": "good|fair|poor", "contradictions_found": [], "flow_issues": []}}"""),
+            ("human", """Answer: {answer}
+
+Evaluate coherence:""")
+        ])
+
+        chain = prompt | self.llm
+        response = chain.invoke({"answer": answer})
+
+        try:
+            cleaned_response = self._strip_markdown_code_blocks(response.content)
+            result = json.loads(cleaned_response)
+
+            return {
+                "metric": "coherence",
+                "score": result.get("score", 0),
+                "reasoning": result.get("reasoning", ""),
+                "structure_quality": result.get("structure_quality", "unknown"),
+                "contradictions_found": result.get("contradictions_found", []),
+                "flow_issues": result.get("flow_issues", [])
+            }
+        except json.JSONDecodeError:
+            logger.warning("Failed to parse JSON, extracting score manually")
+            return self._parse_fallback(response.content, "coherence")
+
+    def evaluate_conciseness(
+        self,
+        query: str,
+        answer: str,
+        query_type: str = "needle"
+    ) -> Dict[str, Any]:
+        """
+        Evaluate conciseness - context-dependent (needle vs summary queries).
+
+        Args:
+            query: Original question
+            answer: System's answer
+            query_type: "needle" or "summary" (affects rubric)
+
+        Returns:
+            Dictionary with score and reasoning
+        """
+        logger.info(f"Evaluating conciseness ({query_type} query)...")
+
+        if query_type == "needle":
+            rubric = """5 = Precise, direct answer. No unnecessary information
+4 = Mostly concise, minor extra details
+3 = Somewhat verbose, answer buried in extra text
+2 = Very verbose, answer hard to find
+1 = Excessively verbose, overwhelming detail"""
+        else:  # summary
+            rubric = """5 = Comprehensive yet focused. No fluff
+4 = Good coverage, minor redundancies
+3 = Some unnecessary details, but complete
+2 = Too verbose or too sparse
+1 = Extremely verbose or missing key info"""
+
+        prompt = ChatPromptTemplate.from_messages([
+            ("system", f"""You are an evaluation judge. Rate answer conciseness relative to query type.
+
+Query Type: {query_type}
+
+Scoring (1-5):
+{rubric}
+
+For needle queries: Is answer precise and direct?
+For summary queries: Is answer comprehensive without fluff?
+
+Respond in JSON format:
+{{"score": <1-5>, "reasoning": "<explanation>", "answer_length": <word_count>, "appropriate_for_query_type": true|false, "verbosity_issues": []}}"""),
+            ("human", """Query: {query}
+
+Answer: {answer}
+
+Evaluate conciseness:""")
+        ])
+
+        chain = prompt | self.llm
+        response = chain.invoke({
+            "query": query,
+            "answer": answer
+        })
+
+        try:
+            cleaned_response = self._strip_markdown_code_blocks(response.content)
+            result = json.loads(cleaned_response)
+
+            return {
+                "metric": "conciseness",
+                "score": result.get("score", 0),
+                "reasoning": result.get("reasoning", ""),
+                "answer_length": result.get("answer_length", len(answer.split())),
+                "appropriate_for_query_type": result.get("appropriate_for_query_type", True),
+                "verbosity_issues": result.get("verbosity_issues", []),
+                "query_type": query_type
+            }
+        except json.JSONDecodeError:
+            logger.warning("Failed to parse JSON, extracting score manually")
+            return self._parse_fallback(response.content, "conciseness")
+
+    def evaluate_citation_quality(
+        self,
+        answer: str,
+        retrieved_context: str
+    ) -> Dict[str, Any]:
+        """
+        Evaluate citation quality - are sources cited correctly?
+
+        Args:
+            answer: System's answer
+            retrieved_context: Context retrieved by system
+
+        Returns:
+            Dictionary with score and reasoning
+        """
+        logger.info("Evaluating citation quality...")
+
+        prompt = ChatPromptTemplate.from_messages([
+            ("system", """You are an evaluation judge. Rate the quality of source citations in the answer.
+
+Scoring (1-5):
+5 = All facts cited with section references. Citations accurate
+4 = Most facts cited, minor citation gaps
+3 = Some facts cited, significant gaps
+2 = Few citations, mostly uncited claims
+1 = No citations or incorrect citations
+
+Consider:
+- Are factual claims cited (e.g., "per Medical Documentation")?
+- Are citations accurate (info actually in cited section)?
+- Are citations specific enough?
+
+ESCAPE CLAUSE: If context has no section metadata, return score "N/A".
+
+Respond in JSON format:
+{{"score": <1-5 or "N/A">, "reasoning": "<explanation>", "cited_facts": <count>, "uncited_facts": <count>, "incorrect_citations": []}}"""),
+            ("human", """Answer: {answer}
+
+Retrieved Context: {context}
+
+Evaluate citation quality:""")
+        ])
+
+        chain = prompt | self.llm
+        response = chain.invoke({
+            "answer": answer,
+            "context": retrieved_context
+        })
+
+        try:
+            cleaned_response = self._strip_markdown_code_blocks(response.content)
+            result = json.loads(cleaned_response)
+
+            score = result.get("score", 0)
+            escape_clause_triggered = (score == "N/A")
+
+            return {
+                "metric": "citation_quality",
+                "score": score if not escape_clause_triggered else "N/A",
+                "reasoning": result.get("reasoning", ""),
+                "cited_facts": result.get("cited_facts", 0),
+                "uncited_facts": result.get("uncited_facts", 0),
+                "incorrect_citations": result.get("incorrect_citations", []),
+                "escape_clause_triggered": escape_clause_triggered
+            }
+        except json.JSONDecodeError:
+            logger.warning("Failed to parse JSON, extracting score manually")
+            return self._parse_fallback(response.content, "citation_quality")
+
+    def evaluate_query_understanding(
+        self,
+        query: str,
+        answer: str
+    ) -> Dict[str, Any]:
+        """
+        Evaluate query understanding - did agent understand the question?
+        Separate from correctness: can understand query but retrieve wrong facts.
+
+        Args:
+            query: Original question
+            answer: System's answer
+
+        Returns:
+            Dictionary with score and reasoning
+        """
+        logger.info("Evaluating query understanding...")
+
+        prompt = ChatPromptTemplate.from_messages([
+            ("system", """You are an evaluation judge. Rate how well the agent understood the query.
+
+Scoring (1-5):
+5 = Perfect understanding of query intent and requirements
+4 = Good understanding, minor misinterpretation
+3 = Partial understanding, missed some nuances
+2 = Poor understanding, answered wrong question
+1 = Complete misunderstanding of query
+
+Consider:
+- Did agent address the actual question asked?
+- Did agent handle ambiguities appropriately?
+- Did agent infer missing context correctly?
+
+SEPARATE from correctness: Agent can understand query perfectly but retrieve wrong facts.
+
+Respond in JSON format:
+{{"score": <1-5>, "reasoning": "<explanation>", "query_intent_identified": true|false, "misunderstandings": []}}"""),
+            ("human", """Query: {query}
+
+Answer: {answer}
+
+Evaluate query understanding:""")
+        ])
+
+        chain = prompt | self.llm
+        response = chain.invoke({
+            "query": query,
+            "answer": answer
+        })
+
+        try:
+            cleaned_response = self._strip_markdown_code_blocks(response.content)
+            result = json.loads(cleaned_response)
+
+            return {
+                "metric": "query_understanding",
+                "score": result.get("score", 0),
+                "reasoning": result.get("reasoning", ""),
+                "query_intent_identified": result.get("query_intent_identified", False),
+                "misunderstandings": result.get("misunderstandings", [])
+            }
+        except json.JSONDecodeError:
+            logger.warning("Failed to parse JSON, extracting score manually")
+            return self._parse_fallback(response.content, "query_understanding")
+
+    def evaluate_efficiency(
+        self,
+        query: str,
+        tool_trace: List[Dict[str, Any]] = None
+    ) -> Dict[str, Any]:
+        """
+        Evaluate efficiency - optimal tool usage economy.
+
+        Args:
+            query: Original question
+            tool_trace: List of tools called during answer generation
+
+        Returns:
+            Dictionary with score and reasoning
+        """
+        logger.info("Evaluating efficiency...")
+
+        if not tool_trace:
+            return {
+                "metric": "efficiency",
+                "score": "N/A",
+                "reasoning": "Tool trace unavailable",
+                "escape_clause_triggered": True
+            }
+
+        tool_names = [t.get("tool", "unknown") for t in tool_trace]
+        tool_summary = ", ".join(tool_names)
+
+        prompt = ChatPromptTemplate.from_messages([
+            ("system", """You are an evaluation judge. Rate the efficiency of agent's tool usage.
+
+Scoring (1-5):
+5 = Optimal tool usage. No redundant retrievals
+4 = Efficient, minor redundancies
+3 = Acceptable, some unnecessary tool calls
+2 = Inefficient, multiple redundant retrievals
+1 = Highly inefficient, excessive tool usage
+
+Consider:
+- Was minimal necessary information retrieved?
+- Were tools called in logical order?
+- Were there redundant retrievals?
+
+ESCAPE CLAUSE: If tool trace unavailable, return score "N/A".
+
+Respond in JSON format:
+{{"score": <1-5 or "N/A">, "reasoning": "<explanation>", "tools_called": <count>, "optimal_tool_count": <count>, "redundant_calls": []}}"""),
+            ("human", """Query: {query}
+
+Tool Trace: {tool_trace}
+
+Evaluate efficiency:""")
+        ])
+
+        chain = prompt | self.llm
+        response = chain.invoke({
+            "query": query,
+            "tool_trace": tool_summary
+        })
+
+        try:
+            cleaned_response = self._strip_markdown_code_blocks(response.content)
+            result = json.loads(cleaned_response)
+
+            score = result.get("score", 0)
+            escape_clause_triggered = (score == "N/A")
+
+            return {
+                "metric": "efficiency",
+                "score": score if not escape_clause_triggered else "N/A",
+                "reasoning": result.get("reasoning", ""),
+                "tools_called": result.get("tools_called", len(tool_trace)),
+                "optimal_tool_count": result.get("optimal_tool_count", 0),
+                "redundant_calls": result.get("redundant_calls", []),
+                "escape_clause_triggered": escape_clause_triggered
+            }
+        except json.JSONDecodeError:
+            logger.warning("Failed to parse JSON, extracting score manually")
+            return self._parse_fallback(response.content, "efficiency")
+
+    # ==========================================
+    # END NEW GRADERS
+    # ==========================================
 
     def evaluate_full(
         self,

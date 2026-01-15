@@ -11,6 +11,13 @@ from .code_graders import (
 )
 from .code_grader_tests import CodeGraderTestSuite
 from .regression import RegressionTracker, EvaluationRun, Baseline
+from .schemas import (
+    GraderResult,
+    EvaluationResult,
+    AggregateResults,
+    ComparisonResult,
+    create_evaluation_result,
+)
 
 __all__ = [
     'LLMJudge',
@@ -25,4 +32,9 @@ __all__ = [
     'RegressionTracker',
     'EvaluationRun',
     'Baseline',
+    'GraderResult',
+    'EvaluationResult',
+    'AggregateResults',
+    'ComparisonResult',
+    'create_evaluation_result',
 ]
